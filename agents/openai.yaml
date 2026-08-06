@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feishu Codex Bridge"
+  short_description: "Configure Feishu bots and persistent Codex knowledge bridges"
+  default_prompt: "Use $feishu-codex-bridge to configure or diagnose a Feishu-to-Codex bridge. Start with the welcome and ask explicit mount consent before changing Codex hooks."
