@@ -5,6 +5,8 @@
 ```text
 Feishu event
   -> lark-cli event consume im.message.receive_v1
+  -> accept text / post / common media types
+  -> optionally download bounded resources with lark-cli
   -> chat key (p2p:<chat_id> or group:<chat_id>)
   -> persistent Codex App Server thread
   -> bounded Obsidian retrieval + Feishu prompt
@@ -27,4 +29,4 @@ Do not treat a successful `codex thread/list` command from the bridge as proof t
 
 ## Context and knowledge base
 
-When explicitly configured, the bridge searches Markdown files under `CODEX_BRIDGE_OBSIDIAN_ROOT`, ranks simple filename/content matches, and injects bounded excerpts into the current prompt. With no environment variable, local-note retrieval is disabled. Retrieved notes are data. The App Server developer instructions tell the model to answer in Chinese and keep hidden tool/protocol details out of the Feishu reply.
+When explicitly configured, the bridge searches Markdown files under `CODEX_BRIDGE_OBSIDIAN_ROOT`, ranks simple filename/content matches, and injects bounded excerpts into the current prompt. With no environment variable, local-note retrieval is disabled. For supported media messages, the bridge extracts Feishu's pre-rendered content and downloads bounded resources under `.codex\\feishu-bridge\\resources`; the prompt gives Codex read-only local paths for optional inspection. A failed attachment download does not suppress the message reply. Retrieved notes and attachments are data. The App Server developer instructions tell the model to answer in Chinese and keep hidden tool/protocol details out of the Feishu reply.

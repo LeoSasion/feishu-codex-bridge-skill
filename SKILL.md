@@ -11,9 +11,11 @@ Use this skill to reproduce the local Feishu-to-Codex integration without copyin
 
 - Listen to `im.message.receive_v1` through `lark-cli event consume`.
 - Handle p2p messages and group messages that mention the bot.
+- Handle Feishu `text`, `post`, image, file, audio, video, and media message types.
 - Map each Feishu conversation to one persistent Codex App Server thread.
 - Name private threads from the sender and group threads as `群聊·<group name>`.
 - Optionally search a local Obsidian Markdown tree and include bounded excerpts as reference data after an explicit knowledge-base trigger.
+- Download bounded image/file/audio/video resources into the local bridge runtime so Codex read-only tools can inspect them when needed.
 - Reply through Feishu with idempotent message replies.
 - Start and stop the bridge from Codex `SessionStart` and `SessionEnd` hooks.
 - On Windows, send `codex://threads/<thread_id>` when `thread/start` creates a new thread so the running Codex Desktop client refreshes its sidebar. This may bring Codex to the foreground; existing sessions do not trigger it again.
@@ -150,6 +152,9 @@ The bridge reads optional environment variables from `.codex\feishu-bridge\bridg
 | `CODEX_BRIDGE_MAX_CONTEXT_TURNS` | Optional turn cap; `0` keeps all available turns | `0` |
 | `CODEX_BRIDGE_DESKTOP_REFRESH` | Enable Windows deep-link refresh | `1` |
 | `CODEX_BRIDGE_MAX_KB_RESULTS` | Maximum retrieved notes | `8` |
+| `CODEX_BRIDGE_DOWNLOAD_RESOURCES` | Download supported Feishu attachments for local Codex inspection | `1` |
+| `CODEX_BRIDGE_MAX_MESSAGE_RESOURCES` | Maximum resources downloaded per message | `4` |
+| `CODEX_BRIDGE_RESOURCE_DOWNLOAD_TIMEOUT` | Per-resource download timeout in seconds | `120` |
 
 The model's actual context limit remains authoritative. When Obsidian is explicitly connected, keep retrieval bounded so a large vault does not consume the whole turn before the user's message is processed.
 
@@ -160,10 +165,12 @@ The model's actual context limit remains authoritative. When Obsidian is explici
 3. Confirm `.codex\feishu-bridge\bridge.log` contains App Server initialization and event-consumer readiness.
 4. Send one private Feishu message to the bot.
 5. Send one group message with an explicit `@` mention.
-6. Confirm both replies arrive and `sessions.json` contains one `thread_id` per `p2p:<chat_id>` or `group:<chat_id>` key.
-7. For a newly created chat, confirm the log contains `started Codex thread=...` followed by `requested Codex Desktop sidebar refresh thread=...`.
-8. Send a second message in the same chat and confirm the log says `resumed Codex thread=...`; it must not request another desktop refresh.
-9. Only if `obsidian connect` was explicitly used, verify a matching query produces bounded note excerpts. Otherwise verify the log says local-note retrieval is disabled.
+6. Send one Feishu rich-text `post` message and confirm it is not logged as `skip unsupported message type=post`.
+7. If the bot has the required read scope, send one image or file and confirm the log records `message resources` and the Codex prompt includes a local resource path. A resource download failure must not suppress the main reply.
+8. Confirm replies arrive and `sessions.json` contains one `thread_id` per `p2p:<chat_id>` or `group:<chat_id>` key.
+9. For a newly created chat, confirm the log contains `started Codex thread=...` followed by `requested Codex Desktop sidebar refresh thread=...`.
+10. Send a second message in the same chat and confirm the log says `resumed Codex thread=...`; it must not request another desktop refresh.
+11. Only if `obsidian connect` was explicitly used, verify a matching query produces bounded note excerpts. Otherwise verify the log says local-note retrieval is disabled.
 
 Use the stop hook before changing bridge code, then start it again after validation:
 
@@ -178,5 +185,7 @@ Read [architecture.md](references/architecture.md) when a session exists in the 
 
 - If the listener is silent, check bot identity, event subscription, app installation, and `event consume` logs before changing Codex logic.
 - If replies work but names are IDs, inspect the failing `im +messages-mget` or `im chats get` command and request only the missing read scope.
+- If `event status` increments but the log says `skip unsupported message type`, inspect the message type mapping; `post` and common media types should be accepted.
+- If a media message is accepted but no local resource appears, inspect the `+messages-resources-download` error and the bot's `im:message:readonly` scope. Keep the main reply path alive even when one attachment cannot be downloaded.
 - If a new thread exists but the sidebar is stale, check `CODEX_BRIDGE_DESKTOP_REFRESH`, the Codex URI registration, and whether the bridge logged the refresh request. The bridge and Desktop use separate App Server connections; creating a thread in the bridge alone does not invalidate the Desktop renderer cache.
 - If the bridge stops with Codex, restart the project session so the hooks run again. Do not make the Feishu listener a system-wide resident service without the user's explicit request.
