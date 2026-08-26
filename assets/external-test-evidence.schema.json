@@ -1,0 +1,919 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/feishu-codex-bridge/external-test-evidence-v1.json",
+  "title": "Feishu Codex Bridge P0-B external test evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_kind",
+    "receipt_id",
+    "created_at_utc",
+    "release_audit",
+    "source_guard",
+    "runner",
+    "listener_stopped_receipt",
+    "execution",
+    "runtime_guard",
+    "immutability"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "evidence_kind": {
+      "const": "feishu-codex-bridge.p0b.external-test"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "created_at_utc": {
+      "$ref": "#/$defs/utc_timestamp"
+    },
+    "release_audit": {
+      "$ref": "#/$defs/release_audit"
+    },
+    "source_guard": {
+      "$ref": "#/$defs/source_guard"
+    },
+    "runner": {
+      "$ref": "#/$defs/runner"
+    },
+    "listener_stopped_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pre",
+        "post",
+        "final",
+        "lifecycle_mutex"
+      ],
+      "properties": {
+        "pre": {
+          "$ref": "#/$defs/stopped_observation"
+        },
+        "post": {
+          "$ref": "#/$defs/stopped_observation"
+        },
+        "final": {
+          "$ref": "#/$defs/stopped_observation"
+        },
+        "lifecycle_mutex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name_sha256",
+            "namespace",
+            "owner_sid_sha256",
+            "source_hook_sha256",
+            "installed_hook_sha256",
+            "source_stop_hook_sha256",
+            "installed_stop_hook_sha256",
+            "hooks_config_sha256",
+            "hook_comparison",
+            "hook_registration_validated",
+            "lifecycle_exclusion_scope",
+            "held_for_complete_window"
+          ],
+          "properties": {
+            "name_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "namespace": {
+              "const": "global_current_user"
+            },
+            "owner_sid_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "source_hook_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "installed_hook_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "source_stop_hook_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "installed_stop_hook_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "hooks_config_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "hook_comparison": {
+              "const": "equal"
+            },
+            "hook_registration_validated": {
+              "const": true
+            },
+            "lifecycle_exclusion_scope": {
+              "const": "registered_start_and_stop_hooks"
+            },
+            "held_for_complete_window": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "runtime_guard": {
+      "$ref": "#/$defs/runtime_guard"
+    },
+    "immutability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "write_mode",
+        "destination_preexisted",
+        "receipt_outside_source",
+        "receipt_outside_live_runtime",
+        "overwrite_attempted"
+      ],
+      "properties": {
+        "write_mode": {
+          "const": "exclusive_create"
+        },
+        "destination_preexisted": {
+          "const": false
+        },
+        "receipt_outside_source": {
+          "const": true
+        },
+        "receipt_outside_live_runtime": {
+          "const": true
+        },
+        "overwrite_attempted": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utc_timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "manifest_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[^\\\\/:]+(?:/[^\\\\/:]+)*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "manifest_component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "file_count",
+        "files"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "desktop_bridge",
+            "harness_sibling"
+          ]
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/manifest_file"
+          }
+        }
+      }
+    },
+    "exclusion_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "rule_id",
+        "match_count",
+        "matched_path_set_sha256",
+        "must_be_absent",
+        "status"
+      ],
+      "properties": {
+        "component": {
+          "enum": [
+            "desktop_bridge",
+            "harness_sibling"
+          ]
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "matched_path_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "must_be_absent": {
+          "type": "boolean"
+        },
+        "status": {
+          "const": "pass"
+        }
+      }
+    },
+    "release_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_schema_version",
+        "status",
+        "source_version",
+        "source_manifest_sha256",
+        "audited_path_set_sha256",
+        "inventory_sha256",
+        "fault_contract_sha256",
+        "components",
+        "exclusion_results"
+      ],
+      "properties": {
+        "audit_schema_version": {
+          "const": 1
+        },
+        "status": {
+          "const": "pass"
+        },
+        "source_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "audited_path_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "inventory_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fault_contract_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "components": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/manifest_component"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "const": "desktop_bridge"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/manifest_component"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "const": "harness_sibling"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "exclusion_results": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/exclusion_result"
+          }
+        }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "codex_desktop_origin",
+        "os",
+        "powershell",
+        "python",
+        "guard"
+      ],
+      "properties": {
+        "surface": {
+          "enum": [
+            "external_terminal",
+            "ci"
+          ]
+        },
+        "codex_desktop_origin": {
+          "const": false
+        },
+        "os": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "version",
+            "architecture"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecture": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "powershell": {
+          "$ref": "#/$defs/executable_surface"
+        },
+        "python": {
+          "$ref": "#/$defs/executable_surface"
+        },
+        "guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "process_ancestry_complete",
+            "process_ancestry_depth",
+            "process_ancestry_termination",
+            "codex_ancestor_match_count",
+            "external_origin_asserted",
+            "python_authenticode_status",
+            "python_signer_subject_sha256",
+            "python_certificate_thumbprint_sha256",
+            "python_isolated_mode",
+            "python_no_site",
+            "python_identity_verified",
+            "inherited_python_environment_removed",
+            "inherited_sensitive_environment_removed",
+            "child_path_restricted",
+            "clean_powershell_invocation",
+            "powershell_profile_loaded",
+            "supervisor_bound_to_release_audit",
+            "supervisor_sha256"
+          ],
+          "properties": {
+            "process_ancestry_complete": { "type": "boolean" },
+            "process_ancestry_depth": { "type": "integer", "minimum": 1, "maximum": 64 },
+            "process_ancestry_termination": {
+              "enum": ["process_tree_root", "exited_ancestor"]
+            },
+            "codex_ancestor_match_count": { "const": 0 },
+            "external_origin_asserted": { "const": true },
+            "python_authenticode_status": { "const": "valid" },
+            "python_signer_subject_sha256": { "$ref": "#/$defs/sha256" },
+            "python_certificate_thumbprint_sha256": { "$ref": "#/$defs/sha256" },
+            "python_isolated_mode": { "const": true },
+            "python_no_site": { "const": true },
+            "python_identity_verified": { "const": true },
+            "inherited_python_environment_removed": { "const": true },
+            "inherited_sensitive_environment_removed": { "const": true },
+            "child_path_restricted": { "const": true },
+            "clean_powershell_invocation": { "const": true },
+            "powershell_profile_loaded": { "const": false },
+            "supervisor_bound_to_release_audit": { "const": true },
+            "supervisor_sha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      }
+    },
+    "executable_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementation",
+        "version",
+        "executable_sha256"
+      ],
+      "properties": {
+        "implementation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "stopped_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_at_utc",
+        "state",
+        "status_argv",
+        "status_exit_code",
+        "status_stdout_sha256",
+        "pid_file_state",
+        "pid_process_alive",
+        "matching_listener_process_count"
+      ],
+      "properties": {
+        "observed_at_utc": {
+          "$ref": "#/$defs/utc_timestamp"
+        },
+        "state": {
+          "enum": [
+            "absent",
+            "stopped"
+          ]
+        },
+        "status_argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "status_exit_code": {
+          "const": 0
+        },
+        "status_stdout_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "pid_file_state": {
+          "enum": [
+            "absent",
+            "stale"
+          ]
+        },
+        "pid_process_alive": {
+          "const": false
+        },
+        "matching_listener_process_count": {
+          "const": 0
+        }
+      }
+    },
+    "fault_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fault_id",
+        "test_id",
+        "status",
+        "evidence_sha256"
+      ],
+      "properties": {
+        "fault_id": {
+          "type": "string",
+          "pattern": "^F(?:0[1-9]|1[0-2])$"
+        },
+        "test_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "pass"
+        },
+        "evidence_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "fault_id": { "const": "F01" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_exclusive_claim_publication_keeps_canonical_pending;test_desktop_router.DesktopRouterQueueTests.test_identical_producer_overlap_cannot_republish_claimed_request" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F02" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_legacy_unfenced_claim_is_terminalized_as_uncertain" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F03" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_receipt_payload_without_marker_is_authoritative_and_not_replayed;test_desktop_router.DesktopRouterQueueTests.test_receipt_payload_survives_marker_descriptor_close_failure" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F04" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_orphan_terminal_receipt_recovers_as_unknown_and_survives_cleanup" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F05" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_concurrent_terminal_finalizers_preserve_first_receipt" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F06" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_wake_database_lock_preserves_pending_and_reconciles_once" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F07" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_concurrent_conflicting_producers_publish_one_fingerprint" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F08" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_explicit_safe_failure_advances_one_retry_generation;test_desktop_router.DesktopRouterQueueTests.test_retry_generation_ancestry_survives_response_cleanup;test_desktop_router.DesktopRouterQueueTests.test_stale_read_only_claim_advances_retry_generation;test_desktop_router.DesktopRouterQueueTests.test_mutating_claim_keeps_long_ttl_when_read_claim_would_expire" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F09" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_desktop_router.DesktopRouterQueueTests.test_target_lifecycle_failure_never_advances_retry_generation;test_desktop_router.DesktopRouterQueueTests.test_retry_generation_requires_explicit_json_booleans" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F10" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_runtime.PendingProjectMarkerTests.test_fresh_project_marker_precedes_unknown_create_and_same_event_recovers;test_runtime.PendingProjectMarkerTests.test_same_event_resumes_exact_pending_project_marker" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F11" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_runtime.PendingProjectMarkerTests.test_different_event_cannot_overwrite_a_pending_project_marker" } } }
+        },
+        {
+          "if": { "properties": { "fault_id": { "const": "F12" } }, "required": ["fault_id"] },
+          "then": { "properties": { "test_id": { "const": "test_agents_rules.BridgeEnvEntrypointTests.test_malformed_bridge_env_fails_closed_at_dispatcher_start_and_queue_entrypoints" } } }
+        }
+      ]
+    },
+    "source_guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before_audit_sha256",
+        "after_audit_sha256",
+        "comparison",
+        "before_snapshot_manifest_sha256",
+        "after_snapshot_manifest_sha256",
+        "snapshot_comparison",
+        "snapshot_file_count",
+        "pinned_snapshot_file_count",
+        "snapshot_files_pinned_for_complete_window",
+        "pinned_release_file_count",
+        "release_files_pinned_for_complete_window",
+        "tests_ran_from_snapshot"
+      ],
+      "properties": {
+        "before_audit_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "after_audit_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "comparison": {
+          "const": "equal"
+        },
+        "before_snapshot_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "after_snapshot_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "snapshot_comparison": {
+          "const": "equal"
+        },
+        "snapshot_file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pinned_snapshot_file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snapshot_files_pinned_for_complete_window": {
+          "const": true
+        },
+        "pinned_release_file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "release_files_pinned_for_complete_window": {
+          "const": true
+        },
+        "tests_ran_from_snapshot": {
+          "const": true
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "working_directory",
+        "environment",
+        "test_tmp_outside_source",
+        "test_tmp_outside_live_runtime",
+        "started_at_utc",
+        "finished_at_utc",
+        "exit_code",
+        "runner_status",
+        "tests_run",
+        "required_fault_test_count",
+        "failures",
+        "errors",
+        "skipped",
+        "fault_results",
+        "stdout_sha256",
+        "stderr_sha256",
+        "structured_result_sha256",
+        "structured_result_nonce_sha256",
+        "structured_result_verified",
+        "test_result_source",
+        "timeout_seconds",
+        "timed_out",
+        "process_tree_timeout_mode",
+        "process_job_object_mode",
+        "process_job_object_enforced",
+        "process_start_assignment_mode",
+        "termination_wait_seconds",
+        "capture_close_wait_seconds"
+      ],
+      "properties": {
+        "argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "working_directory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "FEISHU_BRIDGE_EXTERNAL_TEST_RUNNER",
+            "PYTHONDONTWRITEBYTECODE",
+            "FEISHU_BRIDGE_TEST_TMP"
+          ],
+          "properties": {
+            "FEISHU_BRIDGE_EXTERNAL_TEST_RUNNER": {
+              "const": "1"
+            },
+            "PYTHONDONTWRITEBYTECODE": {
+              "const": "1"
+            },
+            "FEISHU_BRIDGE_TEST_TMP": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "test_tmp_outside_source": {
+          "const": true
+        },
+        "test_tmp_outside_live_runtime": {
+          "const": true
+        },
+        "started_at_utc": {
+          "$ref": "#/$defs/utc_timestamp"
+        },
+        "finished_at_utc": {
+          "$ref": "#/$defs/utc_timestamp"
+        },
+        "exit_code": {
+          "const": 0
+        },
+        "runner_status": {
+          "const": "pass"
+        },
+        "tests_run": {
+          "type": "integer",
+          "minimum": 19
+        },
+        "required_fault_test_count": {
+          "const": 19
+        },
+        "failures": {
+          "const": 0
+        },
+        "errors": {
+          "const": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fault_results": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "prefixItems": [
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F01" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F02" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F03" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F04" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F05" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F06" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F07" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F08" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F09" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F10" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F11" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/fault_result" },
+                { "type": "object", "properties": { "fault_id": { "const": "F12" } } }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "stdout_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "stderr_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "structured_result_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "structured_result_nonce_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "structured_result_verified": {
+          "const": true
+        },
+        "test_result_source": {
+          "const": "unittest.TestResult"
+        },
+        "timeout_seconds": {
+          "const": 1800
+        },
+        "timed_out": {
+          "const": false
+        },
+        "process_tree_timeout_mode": {
+          "const": "kill_entire_process_tree"
+        },
+        "process_job_object_mode": {
+          "const": "kill_on_close"
+        },
+        "process_job_object_enforced": {
+          "const": true
+        },
+        "process_start_assignment_mode": {
+          "const": "start_then_immediate_assign"
+        },
+        "termination_wait_seconds": {
+          "const": 30
+        },
+        "capture_close_wait_seconds": {
+          "const": 30
+        }
+      }
+    },
+    "runtime_guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_scope",
+        "before_manifest_sha256",
+        "after_manifest_sha256",
+        "final_manifest_sha256",
+        "before_path_count",
+        "after_path_count",
+        "final_path_count",
+        "comparison",
+        "bounded_control_files_unchanged"
+      ],
+      "properties": {
+        "snapshot_scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "before_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "after_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "final_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "before_path_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "after_path_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "final_path_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "comparison": {
+          "const": "equal"
+        },
+        "bounded_control_files_unchanged": {
+          "const": true
+        }
+      }
+    }
+  }
+}

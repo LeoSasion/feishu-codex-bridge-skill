@@ -1,0 +1,44 @@
+{
+  "description": "Feishu Bridge exact-turn final return hooks.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "feishu_final_return",
+            "tool": "bind_user_prompt",
+            "input": {
+              "session_id": "${session_id}",
+              "turn_id": "${turn_id}",
+              "cwd": "${cwd}",
+              "prompt": "${prompt}"
+            },
+            "timeout": 8,
+            "statusMessage": "Correlating Feishu delivery turn"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "feishu_final_return",
+            "tool": "capture_stop_final",
+            "input": {
+              "session_id": "${session_id}",
+              "turn_id": "${turn_id}",
+              "cwd": "${cwd}",
+              "stop_hook_active": "${stop_hook_active}",
+              "last_assistant_message": "${last_assistant_message}"
+            },
+            "timeout": 8,
+            "statusMessage": "Returning final answer to Feishu"
+          }
+        ]
+      }
+    ]
+  }
+}

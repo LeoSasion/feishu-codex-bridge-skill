@@ -1,0 +1,11 @@
+# Local test/runtime artifacts; never publish them with the reusable Skill.
+tests/.tmp/
+_retired/
+.codex/
+.agents/skills/
+/.tmp/
+/plugins/human-authorization-relay/
+/AGENTS.md
+/skills-lock.json
+__pycache__/
+*.py[cod]
