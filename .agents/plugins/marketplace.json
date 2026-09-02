@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "feishu-codex-final-return",
+      "name": "feishu-codex-bridge",
       "source": {
         "source": "local",
-        "path": "./plugins/feishu-codex-final-return"
+        "path": "./plugins/feishu-codex-bridge"
       },
       "policy": {
         "installation": "AVAILABLE",

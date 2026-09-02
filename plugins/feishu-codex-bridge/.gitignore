@@ -1,4 +1,6 @@
-# Local test/runtime artifacts; never publish them with the plugin Marketplace.
+# Local test/runtime artifacts; never publish them with the reusable Skill.
+tests/.tmp/
+_retired/
 .codex/
 .agents/skills/
 /.tmp/

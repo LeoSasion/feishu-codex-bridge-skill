@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "feishu_final_callback": {
+      "title": "飞书 Codex Beeper 与 Responder Final Callback",
+      "description": "Claim one isolated Page for either a bounded read-only catalog/inspection or one Responder-owned Final Callback; the Beeper cannot submit the Final Callback and its capability is not product caller/turn attestation.",
+      "command": "python",
+      "args": [
+        "-I",
+        "-S",
+        "-B",
+        "-u",
+        "./scripts/final_callback_mcp_server.py"
+      ],
+      "cwd": ".",
+      "env_vars": [
+        "LOCALAPPDATA",
+        "PATH",
+        "USERPROFILE"
+      ],
+      "startup_timeout_sec": 10,
+      "tool_timeout_sec": 45,
+      "default_tools_approval_mode": "auto"
+    }
+  }
+}

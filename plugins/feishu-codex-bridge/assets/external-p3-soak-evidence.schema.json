@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openai.local/feishu-codex-bridge/external-p3-soak-evidence-v2.schema.json",
+  "title": "Feishu Codex Bridge external P3 bounded soak evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_kind",
+    "receipt_id",
+    "created_at_utc",
+    "source_version",
+    "source_manifest_sha256",
+    "p0_evidence",
+    "bridge_stopped_receipt",
+    "execution",
+    "guards",
+    "immutability"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "evidence_kind": { "const": "external_p3_bounded_soak" },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "created_at_utc": { "type": "string", "format": "date-time" },
+    "source_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "source_manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "p0_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256", "validation_status"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "pattern": "^p0b-v2-[a-f0-9-]{36}\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "validation_status": { "const": "pass" }
+      }
+    },
+    "bridge_stopped_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre", "post", "final", "lifecycle_mutex"],
+      "properties": {
+        "pre": { "$ref": "#/$defs/bridgeObservation" },
+        "post": { "$ref": "#/$defs/bridgeObservation" },
+        "final": { "$ref": "#/$defs/bridgeObservation" },
+        "lifecycle_mutex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name_sha256",
+            "namespace",
+            "owner_sid_sha256",
+            "source_hook_sha256",
+            "installed_hook_sha256",
+            "source_stop_hook_sha256",
+            "installed_stop_hook_sha256",
+            "hooks_config_sha256",
+            "hook_comparison",
+            "hook_registration_validated",
+            "lifecycle_exclusion_scope",
+            "held_for_complete_window"
+          ],
+          "properties": {
+            "name_sha256": { "$ref": "#/$defs/sha256" },
+            "namespace": { "const": "global_current_user" },
+            "owner_sid_sha256": { "$ref": "#/$defs/sha256" },
+            "source_hook_sha256": { "$ref": "#/$defs/sha256" },
+            "installed_hook_sha256": { "$ref": "#/$defs/sha256" },
+            "source_stop_hook_sha256": { "$ref": "#/$defs/sha256" },
+            "installed_stop_hook_sha256": { "$ref": "#/$defs/sha256" },
+            "hooks_config_sha256": { "$ref": "#/$defs/sha256" },
+            "hook_comparison": { "const": "equal" },
+            "hook_registration_validated": { "const": true },
+            "lifecycle_exclusion_scope": {
+              "const": "registered_start_and_stop_hooks"
+            },
+            "held_for_complete_window": { "const": true }
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "working_directory",
+        "iterations",
+        "scenario_count",
+        "total_tests_run",
+        "hard_timeout_seconds",
+        "started_at_utc",
+        "finished_at_utc",
+        "duration_seconds",
+        "runner_status",
+        "timed_out",
+        "child_process_policy",
+        "child_process_attempts",
+        "live_desktop_contacted",
+        "live_feishu_contacted",
+        "result_sha256",
+        "stdout_sha256",
+        "stderr_sha256",
+        "runner_nonce_sha256"
+      ],
+      "properties": {
+        "working_directory": { "type": "string", "minLength": 3 },
+        "iterations": { "type": "integer", "minimum": 25, "maximum": 100 },
+        "scenario_count": { "const": 10 },
+        "total_tests_run": { "type": "integer", "minimum": 250, "maximum": 1000 },
+        "hard_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 900 },
+        "started_at_utc": { "type": "string", "format": "date-time" },
+        "finished_at_utc": { "type": "string", "format": "date-time" },
+        "duration_seconds": { "type": "number", "minimum": 0, "exclusiveMaximum": 900 },
+        "runner_status": { "const": "pass" },
+        "timed_out": { "const": false },
+        "child_process_policy": { "const": "forbidden" },
+        "child_process_attempts": { "const": 0 },
+        "live_desktop_contacted": { "const": false },
+        "live_feishu_contacted": { "const": false },
+        "result_sha256": { "$ref": "#/$defs/sha256" },
+        "stdout_sha256": { "$ref": "#/$defs/sha256" },
+        "stderr_sha256": { "$ref": "#/$defs/sha256" },
+        "runner_nonce_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "guards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bridge_stopped",
+        "runner_surface",
+        "process_ancestry_depth",
+        "process_ancestry_complete",
+        "process_ancestry_termination",
+        "codex_ancestor_match_count",
+        "p0_pre_validated",
+        "p0_evidence_rehashed_after_run",
+        "source_snapshot_reused",
+        "snapshot_files_pinned",
+        "snapshot_file_count",
+        "source_unchanged",
+        "job_object_enforced"
+      ],
+      "properties": {
+        "bridge_stopped": { "const": true },
+        "runner_surface": { "enum": ["external_terminal", "ci"] },
+        "process_ancestry_depth": { "type": "integer", "minimum": 2, "maximum": 64 },
+        "process_ancestry_complete": { "type": "boolean" },
+        "process_ancestry_termination": {
+          "enum": ["process_tree_root", "exited_ancestor"]
+        },
+        "codex_ancestor_match_count": { "const": 0 },
+        "p0_pre_validated": { "const": true },
+        "p0_evidence_rehashed_after_run": { "const": true },
+        "source_snapshot_reused": { "const": true },
+        "snapshot_files_pinned": { "const": true },
+        "snapshot_file_count": { "type": "integer", "minimum": 1 },
+        "source_unchanged": { "const": true },
+        "job_object_enforced": { "const": true }
+      }
+    },
+    "immutability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "write_mode",
+        "destination_preexisted",
+        "evidence_outside_source",
+        "overwrite_attempted"
+      ],
+      "properties": {
+        "write_mode": { "const": "create_new" },
+        "destination_preexisted": { "const": false },
+        "evidence_outside_source": { "const": true },
+        "overwrite_attempted": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "bridgeObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_at_utc",
+        "capture_contract",
+        "state",
+        "status_argv",
+        "status_exit_code",
+        "status_stdout_sha256",
+        "status_stderr_sha256",
+        "health_snapshot_present",
+        "health_snapshot_valid",
+        "health_status",
+        "health_event_consumer",
+        "health_active_turns",
+        "health_dial_inflight",
+        "health_dial_lease_remaining_seconds",
+        "health_queue_counts",
+        "pid_file_state",
+        "pid_process_alive",
+        "matching_bridge_process_count",
+        "beeper_status_argv",
+        "beeper_status_exit_code",
+        "beeper_status_stdout_sha256",
+        "beeper_status_stderr_sha256",
+        "beeper_source_role",
+        "beeper_runtime_role",
+        "beeper_queue_cli_namespace",
+        "beeper_ok",
+        "beeper_pending",
+        "beeper_claimed",
+        "beeper_dial_inflight",
+        "beeper_dial_lease_remaining_seconds"
+      ],
+      "properties": {
+        "observed_at_utc": { "type": "string", "format": "date-time" },
+        "capture_contract": { "const": "answer_free_idle_status_v1" },
+        "state": { "const": "stopped" },
+        "status_argv": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "status_exit_code": { "const": 0 },
+        "status_stdout_sha256": { "$ref": "#/$defs/sha256" },
+        "status_stderr_sha256": { "$ref": "#/$defs/sha256" },
+        "health_snapshot_present": { "const": true },
+        "health_snapshot_valid": { "const": true },
+        "health_status": { "const": "stopped" },
+        "health_event_consumer": { "const": false },
+        "health_active_turns": { "const": 0 },
+        "health_dial_inflight": { "const": false },
+        "health_dial_lease_remaining_seconds": { "const": null },
+        "health_queue_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["queued", "running", "control_sending", "reply_pending"],
+          "properties": {
+            "queued": { "const": 0 },
+            "running": { "const": 0 },
+            "control_sending": { "const": 0 },
+            "reply_pending": { "const": 0 }
+          }
+        },
+        "pid_file_state": { "enum": ["absent", "stale"] },
+        "pid_process_alive": { "const": false },
+        "matching_bridge_process_count": { "const": 0 },
+        "beeper_status_argv": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "beeper_status_exit_code": { "const": 0 },
+        "beeper_status_stdout_sha256": { "$ref": "#/$defs/sha256" },
+        "beeper_status_stderr_sha256": { "$ref": "#/$defs/sha256" },
+        "beeper_source_role": { "const": "p0_source_snapshot" },
+        "beeper_runtime_role": { "const": "project_runtime" },
+        "beeper_queue_cli_namespace": { "const": "beeper" },
+        "beeper_ok": { "const": true },
+        "beeper_pending": { "const": 0 },
+        "beeper_claimed": { "const": 0 },
+        "beeper_dial_inflight": { "const": false },
+        "beeper_dial_lease_remaining_seconds": { "const": null }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

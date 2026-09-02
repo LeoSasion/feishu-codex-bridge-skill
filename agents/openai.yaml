@@ -1,4 +1,0 @@
-interface:
-  display_name: "Feishu Codex Bridge"
-  short_description: "Route Feishu through one Desktop Gateway"
-  default_prompt: "Use $feishu-codex-bridge to configure or diagnose a durable Feishu listener, one existing Desktop Gateway task, its scheduler heartbeat, and fenced active-work lease renewal without conflating those roles."

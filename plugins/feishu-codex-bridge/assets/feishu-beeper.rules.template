@@ -1,0 +1,13 @@
+# Historical Desktop Beeper execution-policy tombstone.
+#
+# HISTORICAL_BEEPER_RULES_TOMBSTONE_V1
+#
+# This file intentionally defines zero `prefix_rule` entries. Historical
+# producer details are not an operational contract, and no retired executable
+# prefix may be restored here. The current isolated producer has its own closed
+# admission path and does not obtain authority from this tombstone.
+#
+# Read-only Bridge diagnostics and final-callback Hook capture do not require this
+# Beeper rule file. A future product-level pre-dispatch `run_once` producer must
+# use a different file, isolated namespace, pre-dispatch single-use grant, and a
+# closed answer-free runtime attestation. It must never add rules here.
