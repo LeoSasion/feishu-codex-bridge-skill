@@ -3,6 +3,7 @@
 .agents/skills/
 /.tmp/
 /AGENTS.md
+/HANDOFF.md
 /EXPERIMENT-LOG.md
 /skills-lock.json
 __pycache__/
