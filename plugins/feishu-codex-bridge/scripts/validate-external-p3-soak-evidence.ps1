@@ -732,7 +732,19 @@ $expectedDispatcher = Get-FullPath -Path (
 $expectedBeeperHelper = Get-FullPath -Path (
     Join-Path $p0SnapshotRoot 'scripts\beeper_queue_cli.py'
 )
-$expectedRuntime = Get-FullPath -Path (Join-Path $project '.codex\feishu-bridge')
+$canonicalRuntimeCandidate = Join-Path $project '.codex\feishu-codex-bridge-runtime'
+$legacyRuntimeCandidate = Join-Path $project '.codex\feishu-bridge'
+if ((Test-Path -LiteralPath $canonicalRuntimeCandidate) -and
+    (Test-Path -LiteralPath $legacyRuntimeCandidate)) {
+    throw 'Bridge runtime layout is ambiguous; P3 validation refuses two durable state authorities.'
+}
+$expectedRuntime = Get-FullPath -Path $(
+    if (Test-Path -LiteralPath $legacyRuntimeCandidate -PathType Container) {
+        $legacyRuntimeCandidate
+    } else {
+        $canonicalRuntimeCandidate
+    }
+)
 if ([System.IO.Path]::GetFileName($p0SnapshotRoot) -cne 'source-snapshot' -or
     -not (Test-Path -LiteralPath $p0SnapshotRoot -PathType Container)) {
     throw 'P3 bound P0 receipt does not identify its retained source snapshot.'

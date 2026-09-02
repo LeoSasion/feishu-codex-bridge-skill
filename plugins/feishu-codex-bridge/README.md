@@ -1,6 +1,6 @@
 # Feishu Codex Bridge plugin
 
-Current source contract: `4.2.0-alpha.63`.
+Current source contract: `4.2.0-alpha.64`.
 
 This self-contained Codex plugin packages:
 
@@ -110,6 +110,21 @@ transport and is not part of the current readiness route. Project `SessionStart`
 
 Repository-local `HANDOFF.md`, experiment logs, credentials, queues, runtime
 state and installed cache snapshots are intentionally outside the plugin package.
+
+The three local roles have deliberately different roots:
+
+```text
+plugins/feishu-codex-bridge/              canonical source
+.codex/feishu-codex-bridge-runtime/       installed code, config, logs and durable state
+~/.codex/plugins/cache/...                versioned Codex plugin cache
+```
+
+An upgrade from the retired `.codex/feishu-bridge` runtime name begins with the
+stopped `bridge hooks` transaction. It moves that directory once, preserves
+configuration, SQLite state and logs, refreshes the path-bound lifecycle Hooks,
+and invalidates the old manifest so startup stays fail-closed until `bridge upgrade`
+installs and signs the matching runtime. Both directories existing is a hard error;
+they are never merged.
 
 ## Development policy
 

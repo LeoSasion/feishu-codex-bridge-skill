@@ -1,6 +1,6 @@
 # Feishu Codex Bridge 使用手册
 
-当前源码合同版本：`4.2.0-alpha.63`。本文只说明安装、配置和当前可用行为。
+当前源码合同版本：`4.2.0-alpha.64`。本文只说明安装、配置和当前可用行为。
 开发与版本适配见 [upgrade-bridge.md](upgrade-bridge.md)，当前工作区状态只看
 `HANDOFF.md`。
 
@@ -120,13 +120,26 @@ Schema 与生命周期事务，不要求逐步回复“同意/继续”。每步
 新安装默认 locked；空 allowlist 拒绝全部事件。`compat` 只用于显式迁移，不是生产默认。
 旧 lifecycle Hook 迁移必须先停 Bridge，再分别执行 `bridge hooks`、`bridge upgrade` 和重启。
 
+三个本地角色使用不同目录，不能互相替代：
+
+```text
+plugins/feishu-codex-bridge/              canonical source
+.codex/feishu-codex-bridge-runtime/       项目级安装代码、配置、日志与持久状态
+~/.codex/plugins/cache/...                Codex 插件缓存快照
+```
+
+从旧 `.codex/feishu-bridge` 升级时，先停止 Bridge；`bridge hooks` 只在新目录不存在时
+迁移整个目录、刷新嵌入路径的 lifecycle Hooks，并删除旧 manifest 以保持 fail-closed；
+随后 `bridge upgrade` 安装并签名匹配的 runtime。新旧目录同时存在时拒绝选择或合并，
+不得手工复制 SQLite、queue 或 session 状态。
+
 自动执行只包括本文定义的受限本地 producer，不扩大为历史 producer、未请求的发布、跨项目修改
 或凭据变更。
 
 ## 5. 整体插件与 final-callback
 
-唯一源码是 `plugins/feishu-codex-bridge`。repo source、Marketplace route、installed runtime
-与 versioned plugin cache 是四种不同角色；只编辑 source，不直接改 cache。
+唯一源码是 `plugins/feishu-codex-bridge`。repo source、Marketplace route、项目级 installed
+runtime 与 versioned plugin cache 是四种不同角色；只编辑 source，不直接改 runtime 或 cache。
 
 首次接入 repo Marketplace：
 

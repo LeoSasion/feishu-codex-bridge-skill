@@ -341,7 +341,7 @@ class BeeperClientContractTests(unittest.TestCase):
         return replace(
             load_config(),
             project_root=root,
-            runtime_dir=root / ".codex" / "feishu-bridge",
+            runtime_dir=root / ".codex" / "feishu-codex-bridge-runtime",
             beeper_timeout_seconds=3,
         )
 

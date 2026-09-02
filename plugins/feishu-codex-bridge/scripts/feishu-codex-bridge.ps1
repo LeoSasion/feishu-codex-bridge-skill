@@ -205,15 +205,33 @@ function Assert-BridgeStopped {
 
 function Get-BridgePaths {
     $resolved = Resolve-Project
+    $canonicalRuntime = Join-Path $resolved '.codex\feishu-codex-bridge-runtime'
+    $legacyRuntime = Join-Path $resolved '.codex\feishu-bridge'
+    $canonicalRuntimePresent = Test-Path -LiteralPath $canonicalRuntime
+    $legacyRuntimePresent = Test-Path -LiteralPath $legacyRuntime
+    if ($canonicalRuntimePresent -and -not (Test-Path -LiteralPath $canonicalRuntime -PathType Container)) {
+        throw 'The canonical Bridge runtime path exists but is not a directory.'
+    }
+    if ($legacyRuntimePresent -and -not (Test-Path -LiteralPath $legacyRuntime -PathType Container)) {
+        throw 'The legacy Bridge runtime path exists but is not a directory.'
+    }
+    if ($canonicalRuntimePresent -and $legacyRuntimePresent) {
+        throw ('Both canonical and legacy Bridge runtime directories exist. Refusing to choose or merge ' +
+            'two possible durable state authorities.')
+    }
+    $runtime = if ($legacyRuntimePresent) { $legacyRuntime } else { $canonicalRuntime }
     return [pscustomobject]@{
         Project = $resolved
-        Runtime = Join-Path $resolved '.codex\feishu-bridge'
+        Runtime = $runtime
+        CanonicalRuntime = $canonicalRuntime
+        LegacyRuntime = $legacyRuntime
+        RuntimeLayout = $(if ($legacyRuntimePresent) { 'legacy' } elseif ($canonicalRuntimePresent) { 'canonical' } else { 'absent' })
         Start = Join-Path $resolved '.codex\hooks\start-feishu-codex-bridge.ps1'
         Stop = Join-Path $resolved '.codex\hooks\stop-feishu-codex-bridge.ps1'
-        Health = Join-Path $resolved '.codex\feishu-bridge\health.json'
-        Pid = Join-Path $resolved '.codex\feishu-bridge\bridge.pid'
-        Env = Join-Path $resolved '.codex\feishu-bridge\bridge.env'
-        Log = Join-Path $resolved '.codex\feishu-bridge\bridge.log'
+        Health = Join-Path $runtime 'health.json'
+        Pid = Join-Path $runtime 'bridge.pid'
+        Env = Join-Path $runtime 'bridge.env'
+        Log = Join-Path $runtime 'bridge.log'
     }
 }
 
@@ -606,13 +624,17 @@ function Invoke-Installer {
     $installer = Join-Path $PSScriptRoot 'install-feishu-codex-bridge.ps1'
     $arguments = @{ ProjectRoot = $resolvedProjectRoot }
     if ($Upgrade) {
+        $paths = Get-BridgePaths
         Assert-BridgeStopped
-        # Public bridge upgrades are runtime-only. Hooks, project rules, config,
-        # and restart remain separately observable transactions that the
-        # controlling task executes and verifies without pausing for approval.
+        if ($paths.RuntimeLayout -eq 'legacy') {
+            throw ('The legacy runtime root requires the stopped bridge hooks transaction first; ' +
+                'it moves the directory and refreshes path-bound Hooks before runtime upgrade.')
+        }
         $arguments['Force'] = $true
-        $arguments['SkipHooks'] = $true
         $arguments['SkipRuntimeConfig'] = $true
+        # Upgrades remain runtime-only. Hooks, project rules, config, and
+        # restart are separately observable transactions.
+        $arguments['SkipHooks'] = $true
     } else {
         $paths = Get-BridgePaths
         $runtimeResidue = @()
@@ -635,8 +657,13 @@ function Invoke-Installer {
 function Invoke-BridgeHooksRefresh {
     Invoke-BridgeValidate | Out-Null
     $resolvedProjectRoot = Resolve-Project
+    $paths = Get-BridgePaths
     $installer = Join-Path $PSScriptRoot 'install-feishu-codex-bridge.ps1'
-    & $installer -ProjectRoot $resolvedProjectRoot -HooksOnly -Force
+    $arguments = @{ ProjectRoot = $resolvedProjectRoot; HooksOnly = $true; Force = $true }
+    if ($paths.RuntimeLayout -eq 'legacy') {
+        $arguments['MigrateLegacyRuntime'] = $true
+    }
+    & $installer @arguments
     if (-not $?) { throw "$installer failed" }
     Write-Output 'Lifecycle hooks refreshed only. Run and verify the matching runtime install or upgrade before start; the current workflow continues automatically.'
 }
@@ -2821,12 +2848,17 @@ function Invoke-BridgeValidate {
         '[System.IO.File]::WriteAllText($hooksConfigTemporary, $hooksJson, $utf8WithoutBom)',
         '-HookInvocation',
         'SkipRuntimeConfig',
+        'MigrateLegacyRuntime',
+        'Move-LegacyBridgeRuntime',
+        '.codex\feishu-codex-bridge-runtime',
+        'Refusing to choose or merge',
+        '[System.IO.FileAttributes]::ReparsePoint',
         'Skipped lifecycle hook scripts.',
         'Write-BridgeRuntimeManifest',
         'Update-InstalledStoppedHealthSnapshot',
         'runtime-manifest.json',
         'CODEX_BRIDGE_ACCESS_MODE=locked',
-        '$expectedVersion = ''4.2.0-alpha.63''',
+        '$expectedVersion = ''4.2.0-alpha.64''',
         '$BRIDGE_RUNTIME_MANIFEST_SCHEMA = 1'
     )) {
         if ($installerText -notmatch [regex]::Escape($marker)) {
@@ -2877,6 +2909,11 @@ function Invoke-BridgeValidate {
         'bridge readiness',
         'bridge validate',
         'SkipRuntimeConfig',
+        'CanonicalRuntime',
+        'LegacyRuntime',
+        'RuntimeLayout',
+        '$arguments[''MigrateLegacyRuntime''] = $true',
+        'requires the stopped bridge hooks transaction first',
         'first-bootstrap only',
         'Get-InstalledBridgeHookIssues',
         'Get-BridgeHistoricalBeeperRulesState',
@@ -3640,8 +3677,8 @@ function Invoke-BridgeValidate {
         }
     }
     $configText = Get-Content -LiteralPath (Join-Path $skillRoot 'scripts\bridge_core\config.py') -Raw -Encoding utf8
-    if ($configText -notmatch [regex]::Escape('BRIDGE_VERSION = "4.2.0-alpha.63"')) {
-        throw 'Bridge version marker is not 4.2.0-alpha.63.'
+    if ($configText -notmatch [regex]::Escape('BRIDGE_VERSION = "4.2.0-alpha.64"')) {
+        throw 'Bridge version marker is not 4.2.0-alpha.64.'
     }
     foreach ($accessDefaultMarker in @(
         '"CODEX_BRIDGE_ACCESS_MODE": ("locked"',
@@ -3726,7 +3763,7 @@ function Invoke-BridgeValidate {
         throw 'SKILL.md frontmatter is missing required name/description fields.'
     }
     foreach ($beeperMarker in @(
-        '4.2.0-alpha.63',
+        '4.2.0-alpha.64',
         '[feishu-codex-bridge-skill.md](../../feishu-codex-bridge-skill.md)',
         '[upgrade-bridge.md](../../upgrade-bridge.md)',
         '本地 `HANDOFF.md`',

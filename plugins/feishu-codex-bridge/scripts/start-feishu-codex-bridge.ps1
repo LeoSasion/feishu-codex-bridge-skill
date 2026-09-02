@@ -28,7 +28,7 @@ if ($env:CODEX_BRIDGE_CHILD -eq '1') {
 $startHookScript = $MyInvocation.MyCommand.Path
 $hooksRoot = Split-Path -Parent $startHookScript
 $projectRoot = Split-Path -Parent (Split-Path -Parent $hooksRoot)
-$runtimeRoot = Join-Path $projectRoot '.codex\feishu-bridge'
+$runtimeRoot = Join-Path $projectRoot '.codex\feishu-codex-bridge-runtime'
 $bridgeScript = Join-Path $runtimeRoot 'bridge.py'
 $runtimeManifest = Join-Path $runtimeRoot 'runtime-manifest.json'
 $stopHookScript = Join-Path $hooksRoot 'stop-feishu-codex-bridge.ps1'

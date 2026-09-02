@@ -9,7 +9,7 @@ import re
 from typing import Mapping
 
 
-BRIDGE_VERSION = "4.2.0-alpha.63"
+BRIDGE_VERSION = "4.2.0-alpha.64"
 
 BOOLEAN_ENV_DEFAULTS = {
     "CODEX_BRIDGE_DOWNLOAD_RESOURCES": True,
@@ -177,7 +177,11 @@ def load_config() -> BridgeConfig:
     project_value = os.environ.get("CODEX_BRIDGE_PROJECT_ROOT", "").strip()
     project_root = Path(project_value).resolve() if project_value else Path.cwd().resolve()
     runtime_value = os.environ.get("CODEX_BRIDGE_RUNTIME_DIR", "").strip()
-    runtime_dir = Path(runtime_value).resolve() if runtime_value else project_root / ".codex" / "feishu-bridge"
+    runtime_dir = (
+        Path(runtime_value).resolve()
+        if runtime_value
+        else project_root / ".codex" / "feishu-codex-bridge-runtime"
+    )
 
     access_mode = _enum_env("CODEX_BRIDGE_ACCESS_MODE")
     lifecycle_mode = _enum_env("CODEX_BRIDGE_LIFECYCLE_MODE")

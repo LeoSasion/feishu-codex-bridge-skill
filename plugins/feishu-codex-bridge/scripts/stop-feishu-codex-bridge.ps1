@@ -12,7 +12,7 @@ if ($env:CODEX_BRIDGE_CHILD -eq '1') {
 
 $hooksRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent (Split-Path -Parent $hooksRoot)
-$runtimeRoot = Join-Path $projectRoot '.codex\feishu-bridge'
+$runtimeRoot = Join-Path $projectRoot '.codex\feishu-codex-bridge-runtime'
 $pidFile = Join-Path $runtimeRoot 'bridge.pid'
 $stopFile = Join-Path $runtimeRoot 'stop.request'
 $leaseRoot = Join-Path $runtimeRoot 'leases'

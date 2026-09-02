@@ -1405,7 +1405,19 @@ $pythonStream = New-Object System.IO.FileStream(
     [System.IO.FileShare]::Read
 )
 $pythonHash = Get-StreamSha256 -Stream $pythonStream
-$runtime = Get-NormalizedFullPath -Path (Join-Path $project '.codex\feishu-bridge')
+$canonicalRuntimeCandidate = Join-Path $project '.codex\feishu-codex-bridge-runtime'
+$legacyRuntimeCandidate = Join-Path $project '.codex\feishu-bridge'
+if ((Test-Path -LiteralPath $canonicalRuntimeCandidate) -and
+    (Test-Path -LiteralPath $legacyRuntimeCandidate)) {
+    throw 'Bridge runtime layout is ambiguous; Gate B refuses to choose or merge durable state.'
+}
+$runtime = Get-NormalizedFullPath -Path $(
+    if (Test-Path -LiteralPath $legacyRuntimeCandidate -PathType Container) {
+        $legacyRuntimeCandidate
+    } else {
+        $canonicalRuntimeCandidate
+    }
+)
 $externalWork = Assert-ExternalDirectory -Directory $ExternalWorkRoot -Role 'External work root' `
     -ForbiddenRoots @($desktop, $harness, $project, $runtime)
 $evidenceRoot = Assert-ExternalDirectory -Directory $EvidenceDirectory -Role 'Evidence directory' `

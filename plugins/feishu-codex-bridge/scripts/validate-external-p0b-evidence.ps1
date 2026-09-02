@@ -740,7 +740,19 @@ try {
     $desktop = Resolve-ExistingPath -Path $DesktopRoot -Role 'Desktop source root'
     $harness = Resolve-ExistingPath -Path $HarnessRoot -Role 'Harness source root'
     $project = Resolve-ExistingPath -Path $ProjectRoot -Role 'Desktop project root'
-    $runtime = Get-NormalizedFullPath -Path (Join-Path $project '.codex\feishu-bridge')
+    $canonicalRuntimeCandidate = Join-Path $project '.codex\feishu-codex-bridge-runtime'
+    $legacyRuntimeCandidate = Join-Path $project '.codex\feishu-bridge'
+    if ((Test-Path -LiteralPath $canonicalRuntimeCandidate) -and
+        (Test-Path -LiteralPath $legacyRuntimeCandidate)) {
+        throw 'Bridge runtime layout is ambiguous; Gate B validation refuses two durable state authorities.'
+    }
+    $runtime = Get-NormalizedFullPath -Path $(
+        if (Test-Path -LiteralPath $legacyRuntimeCandidate -PathType Container) {
+            $legacyRuntimeCandidate
+        } else {
+            $canonicalRuntimeCandidate
+        }
+    )
     $evidence = Resolve-ExistingPath -Path $EvidencePath -Role 'P0-B evidence file' -Leaf
     $evidenceParent = Resolve-ExistingPath -Path (Split-Path -Parent $evidence) `
         -Role 'P0-B evidence directory'

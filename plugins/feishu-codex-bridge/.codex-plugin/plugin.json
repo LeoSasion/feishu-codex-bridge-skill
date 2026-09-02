@@ -1,6 +1,6 @@
 {
   "name": "feishu-codex-bridge",
-  "version": "0.1.0+codex.20260902205500",
+  "version": "0.1.0+codex.20260902234400",
   "description": "Feishu/Lark Bridge with bounded /init binding, one isolated Beeper Dial, and Responder-owned business execution.",
   "author": {
     "name": "Feishu Codex Bridge Project"

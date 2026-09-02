@@ -945,7 +945,19 @@ if (-not $lifecycleMutexOwned) {
     throw 'Bridge lifecycle mutex is already held; P3 soak requires an uninterrupted stopped window.'
 }
 
-$runtime = Get-FullPath -Path (Join-Path $project '.codex\feishu-bridge')
+$canonicalRuntimeCandidate = Join-Path $project '.codex\feishu-codex-bridge-runtime'
+$legacyRuntimeCandidate = Join-Path $project '.codex\feishu-bridge'
+if ((Test-Path -LiteralPath $canonicalRuntimeCandidate) -and
+    (Test-Path -LiteralPath $legacyRuntimeCandidate)) {
+    throw 'Bridge runtime layout is ambiguous; P3 refuses to choose or merge durable state.'
+}
+$runtime = Get-FullPath -Path $(
+    if (Test-Path -LiteralPath $legacyRuntimeCandidate -PathType Container) {
+        $legacyRuntimeCandidate
+    } else {
+        $canonicalRuntimeCandidate
+    }
+)
 $dispatcher = Get-FullPath -Path (Join-Path $snapshotRoot 'scripts\feishu-codex-bridge.ps1')
 $beeperHelper = Get-FullPath -Path (Join-Path $snapshotRoot 'scripts\beeper_queue_cli.py')
 $installedStartHook = Get-FullPath -Path (Join-Path $project '.codex\hooks\start-feishu-codex-bridge.ps1')

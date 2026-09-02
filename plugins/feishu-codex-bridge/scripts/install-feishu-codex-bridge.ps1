@@ -9,13 +9,16 @@ param(
 
     [switch]$SkipRuntimeConfig,
 
-    [switch]$HooksOnly
+    [switch]$HooksOnly,
+
+    [switch]$MigrateLegacyRuntime
 )
 
 $ErrorActionPreference = 'Stop'
 $resolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
 $skillRoot = Split-Path -Parent $PSScriptRoot
-$runtimeRoot = Join-Path $resolvedProjectRoot '.codex\feishu-bridge'
+$runtimeRoot = Join-Path $resolvedProjectRoot '.codex\feishu-codex-bridge-runtime'
+$legacyRuntimeRoot = Join-Path $resolvedProjectRoot '.codex\feishu-bridge'
 $hooksRoot = Join-Path $resolvedProjectRoot '.codex\hooks'
 $bridgeTarget = Join-Path $runtimeRoot 'bridge.py'
 $beeperQueueTarget = Join-Path $runtimeRoot 'beeper_queue_cli.py'
@@ -60,17 +63,56 @@ function Get-BridgeProcessIdentity {
 }
 
 function Assert-BridgeStopped {
-    $pidPath = Join-Path $runtimeRoot 'bridge.pid'
+    param([Parameter(Mandatory = $true)][string]$CandidateRuntimeRoot)
+    $pidPath = Join-Path $CandidateRuntimeRoot 'bridge.pid'
     if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) { return }
     $bridgePid = 0
     if (-not [int]::TryParse((Get-Content -LiteralPath $pidPath -Raw).Trim(), [ref]$bridgePid) -or
         $bridgePid -le 0) { return }
-    $identity = Get-BridgeProcessIdentity -ProcessId $bridgePid -BridgeScript $bridgeTarget
+    $identity = Get-BridgeProcessIdentity `
+        -ProcessId $bridgePid `
+        -BridgeScript (Join-Path $CandidateRuntimeRoot 'bridge.py')
     if (-not $identity.Exists -or ($identity.Verified -and -not $identity.IsBridge)) { return }
     if (-not $identity.Verified) {
         throw "Bridge PID $bridgePid exists, but its Python command line could not be verified; refusing installation changes."
     }
     throw "Bridge must be stopped before installation changes; stop this exact verified Bridge as a separate observable transaction (PID $bridgePid)."
+}
+
+function Move-LegacyBridgeRuntime {
+    if (-not $MigrateLegacyRuntime) { return }
+    if (-not $Force -or -not $HooksOnly) {
+        throw 'MigrateLegacyRuntime requires a forced hook-only refresh.'
+    }
+    if ((Test-Path -LiteralPath $runtimeRoot) -or
+        -not (Test-Path -LiteralPath $legacyRuntimeRoot -PathType Container)) {
+        throw ('Runtime migration requires exactly one legacy directory and no canonical runtime ' +
+            'directory; refusing to merge or infer durable state ownership.')
+    }
+    Assert-BridgeStopped -CandidateRuntimeRoot $legacyRuntimeRoot
+
+    $projectInfo = Get-Item -LiteralPath $resolvedProjectRoot -Force -ErrorAction Stop
+    $codexRoot = Join-Path $resolvedProjectRoot '.codex'
+    $codexInfo = Get-Item -LiteralPath $codexRoot -Force -ErrorAction Stop
+    $legacyInfo = Get-Item -LiteralPath $legacyRuntimeRoot -Force -ErrorAction Stop
+    foreach ($directory in @($projectInfo, $codexInfo, $legacyInfo)) {
+        if (-not $directory.PSIsContainer -or
+            ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw 'Runtime migration refuses non-directory or reparse-point path components.'
+        }
+    }
+    $expectedCodexRoot = [System.IO.Path]::GetFullPath((Join-Path $resolvedProjectRoot '.codex'))
+    if (-not $legacyInfo.Parent.FullName.Equals($expectedCodexRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not $codexInfo.FullName.Equals($expectedCodexRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Runtime migration path containment verification failed.'
+    }
+
+    Move-Item -LiteralPath $legacyInfo.FullName -Destination $runtimeRoot -ErrorAction Stop
+    if ((Test-Path -LiteralPath $legacyRuntimeRoot) -or
+        -not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
+        throw 'Runtime migration did not reach one unambiguous canonical directory.'
+    }
+    Write-Output 'Migrated the stopped Bridge runtime directory to .codex\feishu-codex-bridge-runtime.'
 }
 
 function Assert-ManifestCapableHooks {
@@ -93,8 +135,16 @@ if ($HooksOnly -and -not $Force -and
     ((Test-Path -LiteralPath $startTarget) -or (Test-Path -LiteralPath $stopTarget))) {
     throw 'HooksOnly requires Force when replacing installed lifecycle hooks.'
 }
+if ((Test-Path -LiteralPath $runtimeRoot) -and (Test-Path -LiteralPath $legacyRuntimeRoot)) {
+    throw ('Both canonical and legacy Bridge runtime directories exist. Refusing to choose or merge ' +
+        'two possible durable state authorities.')
+}
+if ((Test-Path -LiteralPath $legacyRuntimeRoot) -and -not $MigrateLegacyRuntime) {
+    throw 'A legacy Bridge runtime exists; use the canonical bridge upgrade command for stopped migration.'
+}
+Move-LegacyBridgeRuntime
 if ($HooksOnly -or $Force -or $SkipHooks) {
-    Assert-BridgeStopped
+    Assert-BridgeStopped -CandidateRuntimeRoot $runtimeRoot
 }
 if ($HooksOnly) {
     foreach ($requiredInstalledPath in @($bridgeTarget, $envTarget, $startTarget, $stopTarget)) {
@@ -515,7 +565,7 @@ function Convert-RetiredStoppedHealthSnapshot {
 }
 
 function Write-BridgeRuntimeManifest {
-    $expectedVersion = '4.2.0-alpha.63'
+    $expectedVersion = '4.2.0-alpha.64'
     $runtimeFiles = @(
         'bridge.py',
         'beeper_queue_cli.py',
@@ -626,7 +676,7 @@ function Update-InstalledStoppedHealthSnapshot {
         throw 'Installed Bridge health is not exactly stopped and idle; refusing version refresh.'
     }
 
-    $health.bridge_version = '4.2.0-alpha.63'
+    $health.bridge_version = '4.2.0-alpha.64'
     $health.runtime_manifest_sha256 = (
         Get-FileHash -LiteralPath $runtimeManifestTarget -Algorithm SHA256 -ErrorAction Stop
     ).Hash.ToLowerInvariant()

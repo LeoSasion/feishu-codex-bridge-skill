@@ -512,7 +512,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
             project = Path(temporary)
-            runtime = project / ".codex" / "feishu-bridge"
+            runtime = project / ".codex" / "feishu-codex-bridge-runtime"
             runtime.mkdir(parents=True)
             health = runtime / "health.json"
             observation = {
@@ -529,7 +529,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             now = time.time()
             base_health = {
                 "status": "online",
-                "bridge_version": "4.2.0-alpha.63",
+                "bridge_version": "4.2.0-alpha.64",
                 "pid": 1,
                 "started_at": now - 1,
                 "updated_at": now,
@@ -758,7 +758,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
             project = Path(temporary)
-            runtime = project / ".codex" / "feishu-bridge"
+            runtime = project / ".codex" / "feishu-codex-bridge-runtime"
             hooks = project / ".codex" / "hooks"
             runtime.mkdir(parents=True)
             hooks.mkdir(parents=True)
@@ -1170,7 +1170,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
     def _run_hook_only_installer(
         self, project: Path, health_payload: dict[str, object]
     ) -> subprocess.CompletedProcess[str]:
-        runtime = project / ".codex" / "feishu-bridge"
+        runtime = project / ".codex" / "feishu-codex-bridge-runtime"
         hooks = project / ".codex" / "hooks"
         runtime.mkdir(parents=True)
         hooks.mkdir(parents=True)
@@ -1338,7 +1338,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr + result.stdout)
             migrated = json.loads(
-                (project / ".codex" / "feishu-bridge" / "health.json").read_text(
+                (project / ".codex" / "feishu-codex-bridge-runtime" / "health.json").read_text(
                     encoding="utf-8"
                 )
             )
@@ -1357,7 +1357,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             original = self._prefixed_stopped_health(pending=1)
             result = self._run_hook_only_installer(project, original)
             self.assertNotEqual(0, result.returncode)
-            health = project / ".codex" / "feishu-bridge" / "health.json"
+            health = project / ".codex" / "feishu-codex-bridge-runtime" / "health.json"
             self.assertEqual(original, json.loads(health.read_text(encoding="utf-8")))
             self.assertIn(
                 "not exactly stopped and idle",
@@ -1372,7 +1372,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr + result.stdout)
             migrated = json.loads(
-                (project / ".codex" / "feishu-bridge" / "health.json").read_text(
+                (project / ".codex" / "feishu-codex-bridge-runtime" / "health.json").read_text(
                     encoding="utf-8"
                 )
             )
@@ -1408,7 +1408,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             original = self._pre_glossary_stopped_health(pending=1)
             result = self._run_hook_only_installer(project, original)
             self.assertNotEqual(0, result.returncode)
-            health = project / ".codex" / "feishu-bridge" / "health.json"
+            health = project / ".codex" / "feishu-codex-bridge-runtime" / "health.json"
             self.assertEqual(original, json.loads(health.read_text(encoding="utf-8")))
             self.assertIn(
                 "not exactly stopped and idle",
@@ -1423,7 +1423,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr + result.stdout)
             migrated = json.loads(
-                (project / ".codex" / "feishu-bridge" / "health.json").read_text(
+                (project / ".codex" / "feishu-codex-bridge-runtime" / "health.json").read_text(
                     encoding="utf-8"
                 )
             )
@@ -1444,12 +1444,195 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             original = self._retired_stopped_health(pending=1)
             result = self._run_hook_only_installer(project, original)
             self.assertNotEqual(0, result.returncode)
-            health = project / ".codex" / "feishu-bridge" / "health.json"
+            health = project / ".codex" / "feishu-codex-bridge-runtime" / "health.json"
             self.assertEqual(original, json.loads(health.read_text(encoding="utf-8")))
             self.assertIn(
                 "not exactly stopped and idle",
                 result.stderr + result.stdout,
             )
+
+
+@unittest.skipUnless(powershell(), "PowerShell is required")
+class RuntimeRootMigrationTests(unittest.TestCase):
+    current_name = "feishu-codex-bridge-runtime"
+    legacy_name = "feishu-bridge"
+
+    @staticmethod
+    def run_installer(project: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                str(powershell()),
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(INSTALLER),
+                "-ProjectRoot",
+                str(project),
+                *arguments,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=60,
+        )
+
+    def stage_legacy_runtime(self, project: Path) -> tuple[Path, Path]:
+        legacy = project / ".codex" / self.legacy_name
+        hooks = project / ".codex" / "hooks"
+        legacy.mkdir(parents=True)
+        hooks.mkdir(parents=True)
+        (legacy / "bridge.py").write_text("# legacy runtime code\n", encoding="utf-8")
+        (legacy / "bridge.env").write_text(
+            "CODEX_BRIDGE_ACCESS_MODE=locked\n",
+            encoding="utf-8",
+        )
+        (legacy / "state.sqlite3").write_bytes(b"durable-state-canary")
+        (legacy / "bridge.log").write_text("retained-log-canary\n", encoding="utf-8")
+        current_fragment = ".codex\\feishu-codex-bridge-runtime"
+        legacy_fragment = ".codex\\feishu-bridge"
+        for source in (START_HOOK, STOP_HOOK):
+            text = source.read_text(encoding="utf-8").replace(
+                current_fragment,
+                legacy_fragment,
+            )
+            (hooks / source.name).write_text(text, encoding="utf-8")
+        return legacy, hooks
+
+    def test_stopped_legacy_runtime_moves_once_and_preserves_durable_state(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(os.path.realpath(temporary))
+            legacy, hooks = self.stage_legacy_runtime(project)
+            result = self.run_installer(
+                project,
+                "-Force",
+                "-HooksOnly",
+                "-MigrateLegacyRuntime",
+            )
+            self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+            current = project / ".codex" / self.current_name
+            self.assertFalse(legacy.exists())
+            self.assertTrue(current.is_dir())
+            self.assertEqual(
+                b"durable-state-canary",
+                (current / "state.sqlite3").read_bytes(),
+            )
+            self.assertEqual(
+                "CODEX_BRIDGE_ACCESS_MODE=locked\n",
+                (current / "bridge.env").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "retained-log-canary\n",
+                (current / "bridge.log").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "# legacy runtime code\n",
+                (current / "bridge.py").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                START_HOOK.read_bytes(),
+                (hooks / START_HOOK.name).read_bytes(),
+            )
+            self.assertFalse((current / "runtime-manifest.json").exists())
+            self.assertIn(
+                "Migrated the stopped Bridge runtime directory",
+                result.stdout,
+            )
+
+    def test_existing_current_and_legacy_directories_fail_without_merge(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(os.path.realpath(temporary))
+            legacy, _hooks = self.stage_legacy_runtime(project)
+            current = project / ".codex" / self.current_name
+            current.mkdir()
+            (current / "current-canary").write_text("current", encoding="utf-8")
+            result = self.run_installer(
+                project,
+                "-Force",
+                "-HooksOnly",
+                "-MigrateLegacyRuntime",
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertTrue(legacy.is_dir())
+            self.assertEqual(
+                "current",
+                (current / "current-canary").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Refusing to choose or merge",
+                result.stderr + result.stdout,
+            )
+
+    def test_direct_installer_never_adopts_legacy_runtime_implicitly(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(os.path.realpath(temporary))
+            legacy, _hooks = self.stage_legacy_runtime(project)
+            result = self.run_installer(
+                project,
+                "-Force",
+                "-SkipHooks",
+                "-SkipRuntimeConfig",
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertTrue(legacy.is_dir())
+            self.assertFalse(
+                (project / ".codex" / self.current_name).exists()
+            )
+            self.assertIn(
+                "use the canonical bridge upgrade command",
+                result.stderr + result.stdout,
+            )
+
+    def test_running_legacy_runtime_refuses_migration_without_moving(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(os.path.realpath(temporary))
+            legacy, _hooks = self.stage_legacy_runtime(project)
+            bridge_script = legacy / "bridge.py"
+            bridge_script.write_text(
+                "import time\ntime.sleep(60)\n",
+                encoding="utf-8",
+            )
+            holder = subprocess.Popen(
+                [sys.executable, str(bridge_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            )
+            try:
+                (legacy / "bridge.pid").write_text(
+                    str(holder.pid),
+                    encoding="ascii",
+                )
+                result = self.run_installer(
+                    project,
+                    "-Force",
+                    "-HooksOnly",
+                    "-MigrateLegacyRuntime",
+                )
+                self.assertNotEqual(
+                    0,
+                    result.returncode,
+                    result.stderr + result.stdout,
+                )
+                self.assertIsNone(holder.poll())
+                self.assertTrue(legacy.is_dir())
+                self.assertFalse(
+                    (project / ".codex" / self.current_name).exists()
+                )
+                self.assertIn(
+                    "Bridge must be stopped before installation changes",
+                    result.stderr + result.stdout,
+                )
+            finally:
+                if holder.poll() is None:
+                    holder.terminate()
+                try:
+                    holder.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    holder.kill()
+                    holder.wait(timeout=10)
 
 
 @unittest.skipUnless(powershell(), "PowerShell is required")
@@ -1486,7 +1669,7 @@ class BridgePidIdentityTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
                 project = Path(temporary)
-                runtime = project / ".codex" / "feishu-bridge"
+                runtime = project / ".codex" / "feishu-codex-bridge-runtime"
                 hooks = project / ".codex" / "hooks"
                 runtime.mkdir(parents=True)
                 hooks.mkdir(parents=True)
@@ -1595,7 +1778,7 @@ class BridgeLifecycleDetachmentTests(unittest.TestCase):
     )
 
     def stage_canary_runtime(self, project: Path) -> tuple[Path, Path, Path]:
-        runtime = project / ".codex" / "feishu-bridge"
+        runtime = project / ".codex" / "feishu-codex-bridge-runtime"
         hooks = project / ".codex" / "hooks"
         runtime.mkdir(parents=True)
         hooks.mkdir(parents=True)
@@ -1779,7 +1962,7 @@ class BridgeEnvEntrypointTests(unittest.TestCase):
     )
 
     def stage_isolated_runtime(self, root: Path, env_text: str) -> Path:
-        runtime = root / ".codex" / "feishu-bridge"
+        runtime = root / ".codex" / "feishu-codex-bridge-runtime"
         hooks = root / ".codex" / "hooks"
         runtime.mkdir(parents=True)
         hooks.mkdir(parents=True)

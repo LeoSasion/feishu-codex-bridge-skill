@@ -19,7 +19,7 @@ $skillRoot = Split-Path -Parent $PSScriptRoot
 $fragmentPath = Join-Path $skillRoot 'assets\AGENTS.feishu-codex-bridge.md'
 $agentsPath = Join-Path $resolvedProjectRoot 'AGENTS.md'
 $backupRoot = Join-Path $resolvedProjectRoot (
-    '.codex\feishu-bridge\backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-agents-rules'
+    '.codex\feishu-codex-bridge-runtime\backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-agents-rules'
 )
 
 if (-not (Test-Path -LiteralPath $fragmentPath -PathType Leaf)) {

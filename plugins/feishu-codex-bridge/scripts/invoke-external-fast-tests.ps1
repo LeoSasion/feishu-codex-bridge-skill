@@ -150,9 +150,20 @@ function Assert-BridgeIdle {
         throw 'bridge_not_idle'
     }
 
+    $canonicalRuntime = Join-Path $Project '.codex\feishu-codex-bridge-runtime'
+    $legacyRuntime = Join-Path $Project '.codex\feishu-bridge'
+    if ((Test-Path -LiteralPath $canonicalRuntime) -and
+        (Test-Path -LiteralPath $legacyRuntime)) {
+        throw 'bridge_runtime_layout_ambiguous'
+    }
+    $runtime = if (Test-Path -LiteralPath $legacyRuntime -PathType Container) {
+        $legacyRuntime
+    } else {
+        $canonicalRuntime
+    }
     $beeper = Invoke-JsonCommand -Executable $Python -Arguments @(
         '-S', '-B', (Join-Path $Desktop 'scripts\beeper_queue_cli.py'),
-        '--runtime-dir', (Join-Path $Project '.codex\feishu-bridge'),
+        '--runtime-dir', $runtime,
         '--queue-namespace', 'beeper', 'status'
     ) -WorkingDirectory (Join-Path $Desktop 'scripts') -StageName 'beeper_queue_precondition'
     if ($beeper.ok -ne $true -or [int]$beeper.pending -ne 0 -or
@@ -253,7 +264,7 @@ try {
 
     $script:FastLaneStage = 'runner'
     $tempParent = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath([IO.Path]::GetTempPath()))
-    $tempRoot = Join-Path $tempParent ('feishu-bridge-fast-' + [guid]::NewGuid().ToString('N'))
+    $tempRoot = Join-Path $tempParent ('feishu-codex-bridge-fast-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tempRoot -ErrorAction Stop | Out-Null
     $process = $null
     $processStarted = $false
@@ -357,7 +368,7 @@ try {
         $resolvedTemp = [IO.Path]::GetFullPath($tempRoot)
         $resolvedParent = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($resolvedTemp)))
         if (-not $resolvedParent.Equals($tempParent, [StringComparison]::OrdinalIgnoreCase) -or
-            [IO.Path]::GetFileName($resolvedTemp) -notmatch '^feishu-bridge-fast-[a-f0-9]{32}$') {
+            [IO.Path]::GetFileName($resolvedTemp) -notmatch '^feishu-codex-bridge-fast-[a-f0-9]{32}$') {
             throw 'temp_cleanup_boundary_invalid'
         }
         $tempItem = Get-Item -LiteralPath $resolvedTemp -Force -ErrorAction Stop

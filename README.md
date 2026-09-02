@@ -21,8 +21,11 @@ codex plugin add feishu-codex-bridge@feishu-codex-bridge
 
 - `.agents/plugins/marketplace.json`：Codex Marketplace 入口。
 - `plugins/feishu-codex-bridge`：完整、自包含的插件。
+- `.codex/feishu-codex-bridge-runtime`：安装后在项目内生成的运行代码、配置与持久状态；它不属于发布源码，也不同于 `~/.codex/plugins/cache/...` 插件缓存。
 - [插件说明](plugins/feishu-codex-bridge/README.md)
 - [Skill 入口](plugins/feishu-codex-bridge/skills/feishu-codex-bridge/SKILL.md)
+
+从旧版 `.codex/feishu-bridge` 升级时，Bridge 必须先停止；升级流程会整体迁移该目录以保留配置和状态。若新旧目录同时存在，安装器会拒绝自动选择或合并。
 
 ### 安全边界
 
@@ -40,5 +43,7 @@ codex plugin add feishu-codex-bridge@feishu-codex-bridge
 ```
 
 Start a new Codex task after installation and invoke `$feishu-codex-bridge` to configure Feishu, install the Bridge runtime, and run read-only diagnostics.
+
+The canonical source lives under `plugins/feishu-codex-bridge`. Installation creates the project-local runtime at `.codex/feishu-codex-bridge-runtime`; this is distinct from the Codex plugin cache under `~/.codex/plugins/cache/...`. A stopped legacy `.codex/feishu-bridge` runtime is migrated as a whole, while ambiguous dual directories fail closed.
 
 The local queue path is not product-level exactly-once. Rare failures may duplicate or miss work, so do not use it for irreversible actions.

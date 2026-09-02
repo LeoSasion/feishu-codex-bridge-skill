@@ -59,6 +59,19 @@ import final_callback_mcp_server as final_callback_mcp  # noqa: E402
 
 
 class ConfigDefaultsTests(unittest.TestCase):
+    def test_runtime_root_names_the_installed_role(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary, patch.dict(
+            os.environ,
+            {"CODEX_BRIDGE_PROJECT_ROOT": temporary},
+            clear=True,
+        ):
+            self.assertEqual(
+                Path(temporary).resolve()
+                / ".codex"
+                / "feishu-codex-bridge-runtime",
+                load_config().runtime_dir,
+            )
+
     def test_plain_text_is_the_exact_return_default(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual("text", load_config().reply_format)

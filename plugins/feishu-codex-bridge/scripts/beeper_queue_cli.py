@@ -53,7 +53,7 @@ def _runtime_dir(value: str) -> Path:
     configured = value.strip() or os.environ.get("CODEX_BRIDGE_RUNTIME_DIR", "").strip()
     if configured:
         return Path(configured).resolve()
-    return (Path.cwd() / ".codex" / "feishu-bridge").resolve()
+    return (Path.cwd() / ".codex" / "feishu-codex-bridge-runtime").resolve()
 
 
 def _emit(payload: dict[str, Any]) -> None:

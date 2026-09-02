@@ -5,7 +5,7 @@ description: "Configure, install, diagnose, and safely develop the Feishu/Lark-t
 
 # Feishu Codex Bridge
 
-当前源码合同版本：`4.2.0-alpha.63`。
+当前源码合同版本：`4.2.0-alpha.64`。
 
 ## 按意图加载
 

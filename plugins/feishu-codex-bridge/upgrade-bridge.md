@@ -1,6 +1,6 @@
 # Feishu Codex Bridge 演化、验证与发布手册
 
-当前源码合同版本：`4.2.0-alpha.63`。本文只保存跨版本仍成立的开发规律，不记录单次事故、
+当前源码合同版本：`4.2.0-alpha.64`。本文只保存跨版本仍成立的开发规律，不记录单次事故、
 测试函数名或历史发布流水。普通安装与使用见
 [feishu-codex-bridge-skill.md](feishu-codex-bridge-skill.md)，当前状态只看工作区
 `HANDOFF.md`。
@@ -133,8 +133,8 @@ Gate B/Soak 的唯一可接受 warning 形状及其严格校验见 `references/r
 |---|---|
 | canonical source | 唯一开发和发布输入 |
 | repo Marketplace entry | 只解析 source route |
-| installed runtime | 已签名 Bridge/Hook 字节，只能通过 upgrade 更新 |
-| versioned plugin cache | 安装快照，只诊断、不直接编辑 |
+| installed runtime | `.codex/feishu-codex-bridge-runtime`；已签名 Bridge/Hook 字节、配置、日志与持久状态，只能通过 lifecycle/upgrade 更新 |
+| versioned plugin cache | `~/.codex/plugins/cache/...` 下的安装快照，只诊断、不直接编辑 |
 | external retained snapshot | 测试证据，只验证、不执行开发命令 |
 
 发布顺序：
@@ -143,7 +143,7 @@ Gate B/Soak 的唯一可接受 warning 形状及其严格校验见 `references/r
 2. 更新一次 cachebuster，然后冻结 canonical source。
 3. 对冻结字节运行 Gate A 与 fresh Gate B；只有 concurrency/persistence/retry/fencing/outbox/transport
    受影响时才运行 P3。
-4. Bridge 停止态 runtime-only upgrade。
+4. Bridge 停止态 runtime-only upgrade；从旧 `.codex/feishu-bridge` 首次迁移时，先以 hook-only transaction 整体移动目录、刷新路径绑定 Hook并使旧 manifest 失效，再运行门禁和 runtime upgrade。新旧目录并存时 fail closed，绝不合并持久状态。
 5. 从同一 Marketplace 安装插件并比较 canonical/installed manifest。
 6. 在新任务核对实际加载 Skill/MCP 和 lifecycle Hooks。
 7. 单独完成 lifecycle-Hook trust review，读取 readiness 中彼此独立的 `mvp` 与

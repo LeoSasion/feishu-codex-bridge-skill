@@ -387,7 +387,7 @@ class LeaseTests(unittest.TestCase):
             config = replace(
                 load_config(),
                 project_root=root,
-                runtime_dir=root / ".codex" / "feishu-bridge",
+                runtime_dir=root / ".codex" / "feishu-codex-bridge-runtime",
                 lifecycle_grace_seconds=0,
             )
             config.lease_dir.mkdir(parents=True)

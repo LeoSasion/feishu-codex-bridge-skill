@@ -6,6 +6,10 @@
 - `plugins/feishu-codex-bridge` is the only project-local Bridge source root.
   Never fall back to retired root-level copies, an installed cache, or an
   external test snapshot for development, release, or execution authority.
+- `.codex/feishu-codex-bridge-runtime` is the project-local installed runtime,
+  configuration, log, and durable-state root. It is never canonical source.
+- A versioned path below the user Codex plugin cache is an installed plugin
+  snapshot. It is distinct from both canonical source and project runtime.
 - Canonical source, installed runtime, plugin cache, retained evidence, and
   product-origin runtime evidence are distinct roles. Content freshness or a
   larger version number does not promote one role into another.
