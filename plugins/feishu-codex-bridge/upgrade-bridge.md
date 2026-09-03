@@ -1,6 +1,6 @@
 # Feishu Codex Bridge 演化、验证与发布手册
 
-当前源码合同版本：`4.2.0-alpha.64`。本文只保存跨版本仍成立的开发规律，不记录单次事故、
+当前源码合同版本：`4.2.0-alpha.66`。本文只保存跨版本仍成立的开发规律，不记录单次事故、
 测试函数名或历史发布流水。普通安装与使用见
 [feishu-codex-bridge-skill.md](feishu-codex-bridge-skill.md)，当前状态只看工作区
 `HANDOFF.md`。
@@ -33,7 +33,7 @@
 |---|---|---|
 | R-AUTH | 内容新旧不等于执行权威 | 只有 canonical source、inventory、manifest 与 repo Marketplace route 共同确定发布源；runtime、cache、retained snapshot 都不可编辑。 |
 | R-PRODUCER | 本地入口隔离，退休 surface 永久不可执行 | 每个新飞书事件直接触发一次 admission，不安装或依赖 recurring Codex automation；只允许新 Beeper + 独立 namespace + exact CLI + opaque page 的一次本地尝试。执行期只以 SQLite 中精确绑定 request/dial/fence/generation 的唯一 dial lease 为活性权威，不再并存 sidecar freshness。queue 已接受但仍未领取时，只能对同一 Beeper 做一次无 payload 冷加载；领取窗口使用 beeper 的唯一有界上限，超时仍先原子封口且不重放；旧实现细节不进入当前 schema、运行规则或测试矩阵。 |
-| R-BEEPER | 单 Beeper 协调，responder 独占业务 | Beeper 只做 task coordination；普通消息只调用一个 responder，`/init` 只做有界 catalog/exact inspection。Read-only completion 与 receipt 保持 answer-free，display 只走一次性 sealed staging。Bridge、App Server、shell、UI、DB 和 rollout 都不能成为第二 responder client。唯一 deep link 只加载 Beeper，不接触 responder 或 final。 |
+| R-BEEPER | 单 Beeper 协调，responder 独占业务 | Beeper 只做 task coordination；普通消息只调用一个 responder，`/init` 只做有界 catalog/exact inspection。Read-only completion 与 receipt 保持 answer-free，display 只走一次性 sealed staging。Bridge、App Server、shell、UI、DB 和 rollout 都不能成为第二 responder controller 或 final fallback。Owner 单次授权的独立 App Server 只能按专项合同评估 no-resume/no-mutation 旁路观察，不能进入 live route。唯一 deep link 只加载 Beeper，不接触 responder 或 final。 |
 | R-REPLAY | 不确定结果永不重放 | 只有明确 `retryable=true` 且 `may_have_started=false` 才能进入新 generation；first terminal outcome 不可覆盖。 |
 | R-FINAL | final 只来自 Responder-owned Final Callback | 必须绑定 request/fence/Beeper/responder/prompt/capability，只接受 `final_callback_source=final_callback`；Beeper 不得提交，native field、readback、UI、DB、OCR、clipboard 都不是 fallback。Bearer capability 不证明产品 caller/turn。 |
 | R-READY | MVP 闭环与生产证明分层，低层不得冒充高层 | `mvp` 只由 current exact-source 的 responder-owned `final_callback` live E2E 与飞书明确送达闭合；production 另需 product `run_once`、task-tool/caller-turn attestation 和 answer-free runtime evidence。 |
@@ -57,7 +57,9 @@ P 编号。
 7. 跨平台系统调用按目标平台语义实现：Windows 进程存活探测必须是只读查询，不能照搬
    POSIX 的 `kill(pid, 0)`；“仍存活”也永远不能替代可执行路径与命令行身份校验。
 
-Schema 生成只证明协议来源，不授权启动 App Server 或连接 responder。当前产品工具目录没有通过闭合
+Schema 生成只证明协议来源，不授权 App Server 控制、resume 或写入 responder。独立、owner 单次授权的
+read-only observer 仍须按当前 Schema 单独闭合披露、无 UI 影响、跨进程可见性与 exact turn 关联；
+过滤 answer-free receipt 不证明 observer 没收到 content-bearing history。当前产品工具目录没有通过闭合
 证明的 `run_once`。因此 current source/runtime 身份一致、loaded Final Callback surface 实际参与、全新已绑定普通消息经
 `final_callback_source=final_callback` 完成且飞书 API 明确确认发送成功后，可以声明
 `mvp=ready`；该机器观测只在当前 Bridge 进程内有效，重启后必须用新消息重建。

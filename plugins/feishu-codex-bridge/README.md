@@ -1,6 +1,6 @@
 # Feishu Codex Bridge plugin
 
-Current source contract: `4.2.0-alpha.64`.
+Current source contract: `4.2.0-alpha.66`.
 
 This self-contained Codex plugin packages:
 
@@ -23,8 +23,13 @@ does not execute user business and never supplies the authoritative final.
 
 Each selected Desktop responder task retains sole ownership of its project,
 context, model, tools, execution and final. Bridge, App Server, shell, UI,
-database and rollout are not alternate responder clients. The one Beeper-only
-deep-link assist loads no business responder and is never a final transport.
+database and rollout are not alternate responder controllers or final transports.
+An explicitly authorized standalone App Server experiment may only observe one
+exact task without resume or mutation; the current content-bearing `thread/read`
+shape is not approved as an unattended live sensor. See
+[App Server read-only boundary](references/app-server-probe.md). The one
+Beeper-only deep-link assist loads no business responder and is never a final
+transport.
 
 This build admits one isolated Dial namespace,
 `beeper`. The Bridge consumes a durable local grant and may

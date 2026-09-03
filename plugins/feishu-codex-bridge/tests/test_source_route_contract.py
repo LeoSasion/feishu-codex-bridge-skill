@@ -16,7 +16,7 @@ import source_route_contract as contract  # noqa: E402
 
 
 PLUGIN_VERSION = "0.1.0+codex.20260829020125"
-SOURCE_VERSION = "4.2.0-alpha.64"
+SOURCE_VERSION = "4.2.0-alpha.66"
 
 
 class SourceRouteContractTests(unittest.TestCase):

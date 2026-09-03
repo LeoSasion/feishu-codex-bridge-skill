@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release_name": "feishu-codex-bridge-plugin",
-  "source_version": "4.2.0-alpha.64",
+  "source_version": "4.2.0-alpha.66",
   "max_text_file_bytes": 2097152,
   "components": [
     {

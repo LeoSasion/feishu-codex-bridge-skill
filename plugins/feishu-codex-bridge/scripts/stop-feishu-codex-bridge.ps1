@@ -5,8 +5,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# FEISHU_BRIDGE_HOOK_SUCCESS_STDOUT_SILENT_V1
+function Write-LifecycleStatus {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    if (-not $HookInvocation) {
+        Write-Output $Message
+    }
+}
+
 if ($env:CODEX_BRIDGE_CHILD -eq '1') {
-    Write-Output 'Skipping Feishu bridge lifecycle hook inside its Codex child.'
+    Write-LifecycleStatus 'Skipping Feishu bridge lifecycle hook inside its Codex child.'
     exit 0
 }
 
@@ -133,7 +141,7 @@ function Release-Lease {
     $leaseId = Get-ShortHash $SessionId
     $leasePath = Join-Path $leaseRoot ("{0}.json" -f $leaseId)
     if (-not (Test-Path -LiteralPath $leasePath)) {
-        Write-Output "Feishu bridge lease $leaseId was already absent."
+        Write-LifecycleStatus "Feishu bridge lease $leaseId was already absent."
         return
     }
     try {
@@ -146,7 +154,7 @@ function Release-Lease {
     $temporary = "$leasePath.tmp"
     $lease | ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding utf8
     Move-Item -LiteralPath $temporary -Destination $leasePath -Force
-    Write-Output "Released Feishu bridge lease $leaseId; shared runtime remains lease-managed."
+    Write-LifecycleStatus "Released Feishu bridge lease $leaseId; shared runtime remains lease-managed."
 }
 
 $hookPayload = Get-InputPayload -Required:$HookInvocation
@@ -177,7 +185,7 @@ Get-ChildItem -LiteralPath $leaseRoot -Filter '*.json' -File -ErrorAction Silent
 Set-Content -LiteralPath $stopFile -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ascii
 
 if (-not (Test-Path -LiteralPath $pidFile)) {
-    Write-Output 'Feishu bridge is not running.'
+    Write-LifecycleStatus 'Feishu bridge is not running.'
     exit 0
 }
 
@@ -185,7 +193,7 @@ $pidText = (Get-Content -LiteralPath $pidFile -Raw).Trim()
 $bridgePid = 0
 if (-not [int]::TryParse($pidText, [ref]$bridgePid)) {
     Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-    Write-Output 'Removed an invalid Feishu bridge PID file.'
+    Write-LifecycleStatus 'Removed an invalid Feishu bridge PID file.'
     exit 0
 }
 
@@ -193,7 +201,7 @@ $bridgeScript = Join-Path $runtimeRoot 'bridge.py'
 $identity = Get-BridgeProcessIdentity -ProcessId $bridgePid -BridgeScript $bridgeScript
 if (-not $identity.Exists) {
     Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-    Write-Output "Stopped Feishu bridge PID $bridgePid."
+    Write-LifecycleStatus "Stopped Feishu bridge PID $bridgePid."
     exit 0
 }
 if (-not $identity.Verified) {
@@ -201,7 +209,7 @@ if (-not $identity.Verified) {
 }
 if (-not $identity.IsBridge) {
     Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-    Write-Output "Removed stale Bridge PID file; PID $bridgePid belongs to non-Bridge process $($identity.ProcessName). No process was stopped."
+    Write-LifecycleStatus "Removed stale Bridge PID file; PID $bridgePid belongs to non-Bridge process $($identity.ProcessName). No process was stopped."
     exit 0
 }
 
@@ -210,7 +218,7 @@ while ((Get-Date) -lt $deadline) {
     $identity = Get-BridgeProcessIdentity -ProcessId $bridgePid -BridgeScript $bridgeScript
     if (-not $identity.Exists) {
         Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-        Write-Output "Stopped Feishu bridge PID $bridgePid."
+        Write-LifecycleStatus "Stopped Feishu bridge PID $bridgePid."
         exit 0
     }
     if (-not $identity.Verified) {
@@ -225,7 +233,7 @@ while ((Get-Date) -lt $deadline) {
     }
     if (-not $identity.IsBridge) {
         Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-        Write-Output "Bridge exited; reused PID $bridgePid now belongs to $($identity.ProcessName). No process was stopped."
+        Write-LifecycleStatus "Bridge exited; reused PID $bridgePid now belongs to $($identity.ProcessName). No process was stopped."
         exit 0
     }
     Start-Sleep -Milliseconds 500
@@ -237,9 +245,9 @@ if ($identity.Exists -and -not $identity.Verified) {
 }
 if ($identity.Exists -and $identity.IsBridge) {
     Stop-Process -InputObject $identity.Process -Force -ErrorAction Stop
-    Write-Output "Force-stopped unresponsive Feishu bridge PID $bridgePid."
+    Write-LifecycleStatus "Force-stopped unresponsive Feishu bridge PID $bridgePid."
 } elseif ($identity.Exists) {
-    Write-Output "Bridge exited; reused PID $bridgePid belongs to $($identity.ProcessName). No process was stopped."
+    Write-LifecycleStatus "Bridge exited; reused PID $bridgePid belongs to $($identity.ProcessName). No process was stopped."
 }
 Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
 } finally {

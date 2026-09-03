@@ -28,6 +28,10 @@ from bridge_core.beeper_client import (  # noqa: E402
     HistoricalBeeperClient,
     BEEPER_LOAD_GRACE_SECONDS,
     BEEPER_POST_LOAD_CLAIM_SECONDS,
+    QUEUE_CONTROL_PROMPT,
+    QUEUE_CONTROL_PROMPT_MAX_CHARS,
+    QUEUE_READONLY_CONTROL_PROMPT,
+    QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS,
     BeeperClient,
     ResponderTurnHandle,
     create_beeper_client,
@@ -451,10 +455,27 @@ class BeeperClientContractTests(unittest.TestCase):
             self.assertEqual(["--thread", BEEPER_THREAD_ID], argv[2:4])
             self.assertEqual("--message", argv[4])
             self.assertEqual(6, len(argv))
-            self.assertTrue(argv[5].endswith(next(iter(queue.pages))))
-            self.assertIn("ignore every native reply", argv[5])
-            self.assertIn("Never call submit_final_callback in this Beeper", argv[5])
-            self.assertIn("Do not", argv[5])
+            page = next(iter(queue.pages))
+            self.assertEqual(QUEUE_CONTROL_PROMPT + page, argv[5])
+            self.assertLessEqual(
+                len(QUEUE_CONTROL_PROMPT), QUEUE_CONTROL_PROMPT_MAX_CHARS
+            )
+            for marker in (
+                "claim_and_arm(Page) once",
+                "mcp__codex_app__send_message_to_thread",
+                "once using only returned",
+                "responder_thread_id, responder_host_id, prompt",
+                "Never do user work",
+                "read/inspect responder state",
+                "submit_final_callback",
+                "Ignore native reply",
+                "waiting_final_callback",
+                "fail_page once",
+                "may_have_started=false",
+                "true after a send attempt",
+                "exactly DONT_NOTIFY",
+            ):
+                self.assertIn(marker, QUEUE_CONTROL_PROMPT)
             self.assertNotIn("read_thread(", argv[5])
             joined = "\0".join(argv)
             self.assertNotIn(body, joined)
@@ -561,7 +582,12 @@ class BeeperClientContractTests(unittest.TestCase):
                 queue.requests[request_id],
             )
             self.assertEqual(1, len(calls))
-            self.assertIn("claim_readonly", calls[0][5])
+            page = next(iter(queue.pages))
+            self.assertEqual(QUEUE_READONLY_CONTROL_PROMPT + page, calls[0][5])
+            self.assertLessEqual(
+                len(QUEUE_READONLY_CONTROL_PROMPT),
+                QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS,
+            )
             self.assertNotIn(RESPONDER_THREAD_ID, "\0".join(calls[0]))
 
     def test_inspection_is_snapshot_bound_and_readonly(self) -> None:
@@ -602,7 +628,12 @@ class BeeperClientContractTests(unittest.TestCase):
                 queue.requests[request_id],
             )
             self.assertEqual(1, len(calls))
-            self.assertIn("claim_readonly", calls[0][5])
+            page = next(iter(queue.pages))
+            self.assertEqual(QUEUE_READONLY_CONTROL_PROMPT + page, calls[0][5])
+            self.assertLessEqual(
+                len(QUEUE_READONLY_CONTROL_PROMPT),
+                QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS,
+            )
             self.assertNotIn(RESPONDER_THREAD_ID, "\0".join(calls[0]))
             with self.assertRaises(BeeperError) as invalid_proof:
                 client.bind_thread(

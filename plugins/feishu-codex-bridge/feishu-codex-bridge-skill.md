@@ -1,6 +1,6 @@
 # Feishu Codex Bridge 使用手册
 
-当前源码合同版本：`4.2.0-alpha.64`。本文只说明安装、配置和当前可用行为。
+当前源码合同版本：`4.2.0-alpha.66`。本文只说明安装、配置和当前可用行为。
 开发与版本适配见 [upgrade-bridge.md](upgrade-bridge.md)，当前工作区状态只看
 `HANDOFF.md`。
 
@@ -112,8 +112,11 @@ Schema 与生命周期事务，不要求逐步回复“同意/继续”。每步
 3. `bridge access -AccessMode locked -OwnerOpenId <ou_...>`：至少一个已验证身份。
 4. 从 repo Marketplace 安装并启用整体 `feishu-codex-bridge` 插件。
 5. `bridge final-callback-register`：绑定 exact manifest-valid runtime。
-6. 在可见 Hook review 中只逐项信任项目的 SessionStart、SessionEnd；callback 插件不再提供
-   UserPromptSubmit/Stop Hook，禁止 `Trust all`。
+6. 首选 Codex Desktop“设置 → 钩子”做可见审核；对话输入框本身不提供 `/hooks`。
+   只逐项信任并开启项目的 SessionStart、SessionEnd；callback 插件不再提供
+   UserPromptSubmit/Stop Hook，禁止 `Trust all`。设置页不可用时，才按
+   [permissions-and-hooks.md](references/permissions-and-hooks.md#8-hook-file-and-trust)
+   从 Windows CMD 动态解析并启动独立官方 `codex.cmd`，再在交互式 CLI 内输入 `/hooks`。
 7. 重启/重载 Codex，并在新任务核对实际插件、Skill、MCP 和 lifecycle Hooks。
 8. 运行 status、doctor、validate 和 readiness。
 

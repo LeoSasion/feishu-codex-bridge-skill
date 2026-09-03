@@ -10,6 +10,14 @@ $ErrorActionPreference = 'Stop'
 $BRIDGE_RUNTIME_MANIFEST_SCHEMA = 1
 $DETACHED_LAUNCH_TIMEOUT_SECONDS = 7
 
+# FEISHU_BRIDGE_HOOK_SUCCESS_STDOUT_SILENT_V1
+function Write-LifecycleStatus {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    if (-not $HookInvocation) {
+        Write-Output $Message
+    }
+}
+
 if ($HookInvocation -and $DetachedLaunch) {
     throw 'HookInvocation and DetachedLaunch are mutually exclusive.'
 }
@@ -21,7 +29,7 @@ if (-not $DetachedLaunch -and -not [string]::IsNullOrWhiteSpace($LeaseId)) {
 }
 
 if ($env:CODEX_BRIDGE_CHILD -eq '1') {
-    Write-Output 'Skipping Feishu bridge lifecycle hook inside its Codex child.'
+    Write-LifecycleStatus 'Skipping Feishu bridge lifecycle hook inside its Codex child.'
     exit 0
 }
 
@@ -538,7 +546,7 @@ if (Test-Path -LiteralPath $pidFile) {
                 $existingBridgePid = $existingPid
             } else {
                 Remove-Item -LiteralPath $pidFile -Force -ErrorAction Stop
-                Write-Output "Removed stale Bridge PID file; PID $existingPid belongs to non-Bridge process $($identity.ProcessName)."
+                Write-LifecycleStatus "Removed stale Bridge PID file; PID $existingPid belongs to non-Bridge process $($identity.ProcessName)."
             }
         } else {
             Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
@@ -551,7 +559,7 @@ if (Test-Path -LiteralPath $pidFile) {
 if ($DetachedLaunch) {
     $detachedLease = Assert-DetachedLaunchLease $LeaseId
     if ([string]$detachedLease.launch_status -ceq 'running' -and $existingBridgePid -le 0) {
-        Write-Output "Feishu bridge lease $LeaseId already has a detached Bridge launch in progress."
+        Write-LifecycleStatus "Feishu bridge lease $LeaseId already has a detached Bridge launch in progress."
         exit 0
     }
 } else {
@@ -559,7 +567,7 @@ if ($DetachedLaunch) {
 }
 if ($existingBridgePid -gt 0) {
     Set-LeaseLaunchState -ExactLeaseId $LeaseId -LaunchState running
-    Write-Output "Feishu bridge lease $LeaseId active; runtime already running (PID $existingBridgePid)."
+    Write-LifecycleStatus "Feishu bridge lease $LeaseId active; runtime already running (PID $existingBridgePid)."
     exit 0
 }
 
@@ -668,7 +676,7 @@ if (-not $DetachedLaunch) {
             if ([int]::TryParse($launchedPidText, [ref]$launchedPid) -and $launchedPid -gt 0) {
                 $launchedIdentity = Get-BridgeProcessIdentity -ProcessId $launchedPid -BridgeScript $bridgeScript
                 if ($launchedIdentity.Exists -and $launchedIdentity.Verified -and $launchedIdentity.IsBridge) {
-                    Write-Output "Activated Feishu bridge lease $LeaseId; Bridge PID $launchedPid."
+                    Write-LifecycleStatus "Activated Feishu bridge lease $LeaseId; Bridge PID $launchedPid."
                     exit 0
                 }
             }
@@ -710,7 +718,7 @@ if (-not $startedIdentity.Exists -or -not $startedIdentity.Verified -or -not $st
     throw 'Detached Bridge process did not match the exact installed bridge.py identity.'
 }
 Set-LeaseLaunchState -ExactLeaseId $LeaseId -LaunchState running
-Write-Output "Detached Feishu bridge lease $LeaseId launched Bridge PID $($process.Id)."
+Write-LifecycleStatus "Detached Feishu bridge lease $LeaseId launched Bridge PID $($process.Id)."
 } catch {
     if ($DetachedLaunch -and -not [string]::IsNullOrWhiteSpace($LeaseId)) {
         try { Set-LeaseLaunchState -ExactLeaseId $LeaseId -LaunchState failed -Release } catch { }

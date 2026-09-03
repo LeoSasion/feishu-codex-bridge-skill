@@ -134,6 +134,9 @@ class AgentsRulesMergeTests(unittest.TestCase):
             "An outcome with `may_have_started=true` is terminal and never automatically",
             "Completion accepts only `final_callback_source=final_callback`",
             "Bridge-owned at-most-once attempt",
+            "alternate\n  responder controller, turn owner, or reply fallback",
+            "non-exclusive,\n  no-resume, no-mutation observation",
+            "current `thread/read` shape is content-bearing",
             "reply once in plain language",
             "The notice is informational, not a repeated",
         ):
@@ -179,6 +182,9 @@ class AgentsRulesMergeTests(unittest.TestCase):
         self.assertNotIn("| R-EVIDENCE |", upgrade)
         self.assertNotIn("| R-OWNER |", upgrade)
         self.assertIn("`bridge validate` 不读取或绑定其中的版本、数量、状态措辞", upgrade)
+        self.assertIn("no-resume/no-mutation 旁路观察", upgrade)
+        self.assertIn("不能进入 live route", upgrade)
+        self.assertIn("不证明 observer 没收到 content-bearing history", upgrade)
 
 
 @unittest.skipUnless(powershell(), "PowerShell is required")
@@ -245,6 +251,167 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             "HANDOFF.md is missing current open-work marker",
         ):
             self.assertNotIn(forbidden_handoff_dependency, validate_source)
+
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(temporary)
+            hooks_directory = project / ".codex" / "hooks"
+            hooks_directory.mkdir(parents=True)
+            start_hook = hooks_directory / START_HOOK.name
+            stop_hook = hooks_directory / STOP_HOOK.name
+            shutil.copyfile(START_HOOK, start_hook)
+            shutil.copyfile(STOP_HOOK, stop_hook)
+            hooks_config = project / ".codex" / "hooks.json"
+
+            def diagnose_hook_config(
+                configuration: dict[str, object],
+            ) -> tuple[dict[str, object], str]:
+                hooks_config.write_text(
+                    json.dumps(configuration, ensure_ascii=False), encoding="utf-8"
+                )
+                result = self.run_diagnostic("doctor", project_root=project)
+                lines = [line for line in result.stdout.splitlines() if line.strip()]
+                self.assertEqual(1, len(lines), result.stdout + result.stderr)
+                payload = json.loads(lines[0])
+                self.assertEqual("bridge.doctor", payload["command"])
+                return payload, result.stdout
+
+            start_command = (
+                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
+                f'"{start_hook}" -HookInvocation'
+            )
+            stop_command = (
+                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
+                f'"{stop_hook}" -HookInvocation'
+            )
+            hook_configuration: dict[str, object] = {
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "matcher": "startup|resume",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": start_command,
+                                    "commandWindows": start_command,
+                                    "timeout": 10,
+                                    "statusMessage": "Activating Feishu bridge lease",
+                                }
+                            ],
+                        }
+                    ],
+                    "SessionEnd": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": stop_command,
+                                    "commandWindows": stop_command,
+                                    "timeout": 3,
+                                    "statusMessage": "Releasing Feishu bridge lease",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            }
+            baseline, _baseline_output = diagnose_hook_config(hook_configuration)
+            self.assertTrue(baseline["hooks"]["valid"])
+            self.assertTrue(
+                baseline["hooks"]["configuration_machine_verified"]
+            )
+            self.assertNotIn(
+                "hook_contract_invalid", baseline["hooks"]["issue_codes"]
+            )
+
+            retired_start = project / "retired" / START_HOOK.name
+            retired_command = (
+                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
+                f'"{retired_start}" -HookInvocation'
+            )
+            stale_configuration = json.loads(json.dumps(hook_configuration))
+            stale_configuration["hooks"]["SessionStart"][0]["hooks"].append(
+                {
+                    "type": "command",
+                    "command": retired_command,
+                    "commandWindows": retired_command,
+                    "timeout": 10,
+                }
+            )
+            stale, stale_output = diagnose_hook_config(stale_configuration)
+            self.assertFalse(stale["hooks"]["valid"])
+            self.assertFalse(stale["hooks"]["configuration_machine_verified"])
+            self.assertIn("hook_contract_invalid", stale["hooks"]["issue_codes"])
+            self.assertNotIn(str(retired_start), stale_output)
+
+            wrong_event_configuration = json.loads(json.dumps(hook_configuration))
+            wrong_event_configuration["hooks"]["UserPromptSubmit"] = [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": start_command,
+                            "commandWindows": start_command,
+                            "timeout": 10,
+                        }
+                    ]
+                }
+            ]
+            wrong_event, wrong_event_output = diagnose_hook_config(
+                wrong_event_configuration
+            )
+            self.assertFalse(wrong_event["hooks"]["valid"])
+            self.assertFalse(
+                wrong_event["hooks"]["configuration_machine_verified"]
+            )
+            self.assertIn(
+                "hook_contract_invalid", wrong_event["hooks"]["issue_codes"]
+            )
+            self.assertNotIn(str(start_hook), wrong_event_output)
+
+            matched_end_configuration = json.loads(json.dumps(hook_configuration))
+            matched_end_configuration["hooks"]["SessionEnd"][0]["matcher"] = (
+                "startup"
+            )
+            matched_end, _matched_end_output = diagnose_hook_config(
+                matched_end_configuration
+            )
+            self.assertFalse(matched_end["hooks"]["valid"])
+            self.assertFalse(
+                matched_end["hooks"]["configuration_machine_verified"]
+            )
+            self.assertIn(
+                "hook_contract_invalid", matched_end["hooks"]["issue_codes"]
+            )
+
+            object_hooks_configuration = json.loads(json.dumps(hook_configuration))
+            object_hooks_configuration["hooks"]["SessionStart"][0]["hooks"] = (
+                object_hooks_configuration["hooks"]["SessionStart"][0]["hooks"][0]
+            )
+            object_hooks, _object_hooks_output = diagnose_hook_config(
+                object_hooks_configuration
+            )
+            self.assertFalse(object_hooks["hooks"]["valid"])
+            self.assertFalse(
+                object_hooks["hooks"]["configuration_machine_verified"]
+            )
+            self.assertIn(
+                "hook_contract_invalid", object_hooks["hooks"]["issue_codes"]
+            )
+
+            string_timeout_configuration = json.loads(json.dumps(hook_configuration))
+            string_timeout_configuration["hooks"]["SessionStart"][0]["hooks"][0][
+                "timeout"
+            ] = "10"
+            string_timeout, _string_timeout_output = diagnose_hook_config(
+                string_timeout_configuration
+            )
+            self.assertFalse(string_timeout["hooks"]["valid"])
+            self.assertFalse(
+                string_timeout["hooks"]["configuration_machine_verified"]
+            )
+            self.assertIn(
+                "hook_contract_invalid", string_timeout["hooks"]["issue_codes"]
+            )
 
         actions = ("status", "doctor", "readiness", "validate")
         start_barrier = threading.Barrier(len(actions))
@@ -334,6 +501,18 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
         self.assertIn("missing_count", doctor["source_runtime_parity"])
         self.assertIn("mismatched_count", doctor["source_runtime_parity"])
         self.assertIsInstance(doctor["hooks"]["issue_codes"], list)
+        self.assertIsInstance(
+            doctor["hooks"]["configuration_machine_verified"], bool
+        )
+        self.assertIsInstance(
+            doctor["hooks"]["installed_bytes_manifest_bound"], bool
+        )
+        self.assertIsInstance(doctor["hooks"]["success_output_silent"], bool)
+        self.assertEqual(
+            "unverified_requires_visible_review",
+            doctor["hooks"]["loaded_cross_layer_uniqueness"],
+        )
+        self.assertTrue(doctor["hooks"]["trust_requires_visible_review"])
         self.assertIsInstance(doctor["environment"]["issue_codes"], list)
 
         readiness = payloads["readiness"]
@@ -385,6 +564,22 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
         self.assertFalse(readiness["terminal_markers"]["exact_surface_attested"])
         self.assertFalse(readiness["hook_review"]["machine_verifiable"])
         self.assertFalse(readiness["hook_review"]["visible_review_observed"])
+        self.assertIsInstance(
+            readiness["hook_review"]["configuration_machine_verified"], bool
+        )
+        self.assertIsInstance(
+            readiness["hook_review"]["installed_bytes_manifest_bound"], bool
+        )
+        self.assertIsInstance(
+            readiness["hook_review"]["success_output_silent"], bool
+        )
+        self.assertEqual(
+            "unverified_requires_visible_review",
+            readiness["hook_review"]["loaded_cross_layer_uniqueness"],
+        )
+        self.assertTrue(
+            readiness["hook_review"]["trust_requires_visible_review"]
+        )
         self.assertEqual("blocked", readiness["scheduler_surface"]["status"])
         self.assertEqual("blocked", readiness["task_tool_surface"]["status"])
         self.assertIn(
@@ -529,7 +724,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             now = time.time()
             base_health = {
                 "status": "online",
-                "bridge_version": "4.2.0-alpha.64",
+                "bridge_version": "4.2.0-alpha.66",
                 "pid": 1,
                 "started_at": now - 1,
                 "updated_at": now,
@@ -1145,6 +1340,8 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             "[System.IO.FileAttributes]::ReparsePoint",
             "Bridge health snapshot has an unsupported Beeper shape",
             "Retired Bridge health metadata is not exactly stopped and idle",
+            "historical-desktop-beeper-tombstoned",
+            "Historical tombstoned Beeper health metadata is not exactly stopped and idle",
             "dial_lease_remaining_seconds = $null",
             "Write-MigratedStoppedHealthSnapshot -Health $health",
         ):
@@ -1183,6 +1380,7 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             "stop-feishu-codex-bridge.ps1",
         ):
             (hooks / hook_name).write_text("# installed fixture\n", encoding="utf-8")
+        self._stage_historical_runtime_manifest(runtime, health_payload)
         (runtime / "health.json").write_text(
             json.dumps(health_payload), encoding="utf-8"
         )
@@ -1201,7 +1399,10 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
+            timeout=60,
         )
 
     @staticmethod
@@ -1330,6 +1531,109 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
             "last_event_at": 1.5,
         }
 
+    @staticmethod
+    def _historical_current_stopped_health(
+        *, pending: int = 0, version: str = "4.2.0-alpha.65"
+    ) -> dict[str, object]:
+        return {
+            "bridge_version": version,
+            "status": "stopped",
+            "pid": 18612,
+            "started_at": 1.0,
+            "updated_at": 2.0,
+            "runtime_manifest_sha256": "c" * 64,
+            "event_consumer": False,
+            "beeper_queue": {
+                "dial_inflight": False,
+                "dial_lease_remaining_seconds": None,
+                "pending": pending,
+                "claimed": 0,
+            },
+            "session_owner": "beeper",
+            "beeper_transport": "historical-desktop-beeper-tombstoned",
+            "beeper_state": "historical-producer-tombstoned",
+            "responder_writer": "desktop-task-only",
+            "active_turns": 0,
+            "queue": {
+                "queued": 0,
+                "running": 0,
+                "control_sending": 0,
+                "reply_pending": 0,
+                "retryable_failed": 1,
+                "completed": 50,
+                "terminal_failed": 2,
+            },
+            "actionable_retryable_failed": 0,
+            "latest_delivery_fidelity": {
+                "fidelity": "identity",
+                "transforms": [],
+            },
+            "mvp_observation": None,
+            "access_mode": "locked",
+            "access_configured": True,
+            "last_event_at": None,
+        }
+
+    @staticmethod
+    def _stage_historical_runtime_manifest(
+        runtime: Path, health_payload: dict[str, object]
+    ) -> None:
+        if health_payload.get("beeper_transport") != (
+            "historical-desktop-beeper-tombstoned"
+        ):
+            return
+        manifest = {
+            "schema_version": 1,
+            "bridge_version": health_payload.get("bridge_version"),
+            "code_files": {},
+            "start_hook_sha256": "a" * 64,
+            "stop_hook_sha256": "b" * 64,
+            "generated_at": 1,
+        }
+        manifest_path = runtime / "runtime-manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        health_payload["runtime_manifest_sha256"] = hashlib.sha256(
+            manifest_path.read_bytes()
+        ).hexdigest()
+
+    def _run_full_installer(
+        self, project: Path, health_payload: dict[str, object]
+    ) -> subprocess.CompletedProcess[str]:
+        runtime = project / ".codex" / "feishu-codex-bridge-runtime"
+        hooks = project / ".codex" / "hooks"
+        runtime.mkdir(parents=True)
+        hooks.mkdir(parents=True)
+        (runtime / "bridge.env").write_text(
+            "CODEX_BRIDGE_ACCESS_MODE=locked\n", encoding="utf-8"
+        )
+        for source in (START_HOOK, STOP_HOOK):
+            (hooks / source.name).write_bytes(source.read_bytes())
+        self._stage_historical_runtime_manifest(runtime, health_payload)
+        (runtime / "health.json").write_text(
+            json.dumps(health_payload), encoding="utf-8"
+        )
+        return subprocess.run(
+            [
+                str(powershell()),
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(INSTALLER),
+                "-ProjectRoot",
+                str(project),
+                "-Force",
+                "-SkipHooks",
+                "-SkipRuntimeConfig",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=60,
+        )
+
     def test_hook_only_migrates_exact_prefixed_stopped_health_shape(self) -> None:
         with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
             project = Path(temporary)
@@ -1363,6 +1667,198 @@ class MachineReadableDiagnosticsTests(unittest.TestCase):
                 "not exactly stopped and idle",
                 result.stderr + result.stdout,
             )
+
+    def test_hook_only_accepts_exact_historical_tombstone_health(self) -> None:
+        for version in (
+            "4.2.0-alpha.63",
+            "4.2.0-alpha.64",
+            "4.2.0-alpha.65",
+            "4.2.0-alpha.66",
+        ):
+            with self.subTest(version=version), tempfile.TemporaryDirectory(
+                dir=TEST_TEMP_ROOT
+            ) as temporary:
+                project = Path(temporary)
+                original = self._historical_current_stopped_health(version=version)
+                result = self._run_hook_only_installer(project, original)
+                self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+                health = (
+                    project
+                    / ".codex"
+                    / "feishu-codex-bridge-runtime"
+                    / "health.json"
+                )
+                self.assertEqual(
+                    original, json.loads(health.read_text(encoding="utf-8"))
+                )
+
+    def test_full_upgrade_refuses_invalid_historical_health_before_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(temporary)
+            original = self._historical_current_stopped_health()
+            original["pid"] = None
+            result = self._run_full_installer(project, original)
+            self.assertNotEqual(0, result.returncode)
+            runtime = project / ".codex" / "feishu-codex-bridge-runtime"
+            hooks = project / ".codex" / "hooks"
+            self.assertEqual(
+                original,
+                json.loads((runtime / "health.json").read_text(encoding="utf-8")),
+            )
+            self.assertEqual(
+                ("CODEX_BRIDGE_ACCESS_MODE=locked" + os.linesep).encode("utf-8"),
+                (runtime / "bridge.env").read_bytes(),
+            )
+            for source in (START_HOOK, STOP_HOOK):
+                self.assertEqual(source.read_bytes(), (hooks / source.name).read_bytes())
+            self.assertEqual(
+                original["runtime_manifest_sha256"],
+                hashlib.sha256(
+                    (runtime / "runtime-manifest.json").read_bytes()
+                ).hexdigest(),
+            )
+            self.assertFalse((runtime / "bridge.py").exists())
+            self.assertFalse((runtime / "beeper_queue_cli.py").exists())
+            self.assertFalse((runtime / "bridge_core").exists())
+            self.assertFalse((runtime / "backups").exists())
+
+    def test_hook_only_refuses_nonidle_historical_tombstone_health(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(temporary)
+            original = self._historical_current_stopped_health(pending=1)
+            result = self._run_hook_only_installer(project, original)
+            self.assertNotEqual(0, result.returncode)
+            health = project / ".codex" / "feishu-codex-bridge-runtime" / "health.json"
+            self.assertEqual(original, json.loads(health.read_text(encoding="utf-8")))
+            self.assertIn(
+                "Historical tombstoned Beeper health preflight failed before installation writes",
+                result.stderr + result.stdout,
+            )
+
+    def test_hook_only_refuses_malformed_historical_tombstone_health(self) -> None:
+        mutations = {
+            "null_pid": lambda payload: payload.update({"pid": None}),
+            "unknown_version": lambda payload: payload.update(
+                {"bridge_version": "4.2.0-alpha.62"}
+            ),
+            "invalid_started_at": lambda payload: payload.update(
+                {"started_at": "1.0"}
+            ),
+            "backwards_updated_at": lambda payload: payload.update(
+                {"updated_at": 0.5}
+            ),
+            "extra_key": lambda payload: payload.update({"unexpected": True}),
+            "missing_access_mode": lambda payload: payload.pop("access_mode"),
+            "invalid_delivery": lambda payload: payload.update(
+                {
+                    "latest_delivery_fidelity": {
+                        "fidelity": "identity",
+                        "transforms": ["markdown"],
+                    }
+                }
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(case=name), tempfile.TemporaryDirectory(
+                dir=TEST_TEMP_ROOT
+            ) as temporary:
+                project = Path(temporary)
+                original = self._historical_current_stopped_health()
+                mutate(original)
+                result = self._run_hook_only_installer(project, original)
+                self.assertNotEqual(0, result.returncode)
+                health = (
+                    project
+                    / ".codex"
+                    / "feishu-codex-bridge-runtime"
+                    / "health.json"
+                )
+                self.assertEqual(
+                    original, json.loads(health.read_text(encoding="utf-8"))
+                )
+                runtime = health.parent
+                hooks = project / ".codex" / "hooks"
+                self.assertEqual(
+                    ("# installed fixture" + os.linesep).encode("utf-8"),
+                    (runtime / "bridge.py").read_bytes(),
+                )
+                self.assertEqual(
+                    ("CODEX_BRIDGE_ACCESS_MODE=locked" + os.linesep).encode(
+                        "utf-8"
+                    ),
+                    (runtime / "bridge.env").read_bytes(),
+                )
+                for hook_name in (
+                    "start-feishu-codex-bridge.ps1",
+                    "stop-feishu-codex-bridge.ps1",
+                ):
+                    self.assertEqual(
+                        ("# installed fixture" + os.linesep).encode("utf-8"),
+                        (hooks / hook_name).read_bytes(),
+                    )
+                self.assertEqual(
+                    original["runtime_manifest_sha256"],
+                    hashlib.sha256(
+                        (runtime / "runtime-manifest.json").read_bytes()
+                    ).hexdigest(),
+                )
+                self.assertFalse((runtime / "backups").exists())
+
+    def test_full_upgrade_refreshes_exact_historical_tombstone_health(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
+            project = Path(temporary)
+            result = self._run_full_installer(
+                project, self._historical_current_stopped_health()
+            )
+            self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+            runtime = project / ".codex" / "feishu-codex-bridge-runtime"
+            health = json.loads((runtime / "health.json").read_text(encoding="utf-8"))
+            manifest = runtime / "runtime-manifest.json"
+            self.assertEqual("4.2.0-alpha.66", health["bridge_version"])
+            self.assertEqual(
+                "historical-desktop-beeper-tombstoned",
+                health["beeper_transport"],
+            )
+            self.assertEqual("historical-producer-tombstoned", health["beeper_state"])
+            self.assertEqual(
+                hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                health["runtime_manifest_sha256"],
+            )
+            for action in ("status", "doctor"):
+                diagnostic = subprocess.run(
+                    [
+                        str(powershell()),
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        str(DISPATCHER),
+                        "bridge",
+                        action,
+                        "-ProjectRoot",
+                        str(project),
+                        "-Json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                    timeout=60,
+                )
+                self.assertIn(
+                    diagnostic.returncode,
+                    {0, 2},
+                    diagnostic.stderr + diagnostic.stdout,
+                )
+                payload = json.loads(diagnostic.stdout)
+                snapshot = payload["health_snapshot"]
+                self.assertTrue(snapshot["valid"])
+                self.assertTrue(snapshot["schema_current"])
+                self.assertTrue(snapshot["runtime_manifest_current"])
+                self.assertEqual("stopped", snapshot["status"])
 
     def test_hook_only_migrates_exact_pre_glossary_stopped_health_shape(self) -> None:
         with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
@@ -1855,6 +2351,55 @@ for name in ("bridge.pid", "bridge.lock"):
             sys.path.insert(0, scripts_path)
         from app_server_host import WindowsOwnedJob
         from bridge_core.runtime import is_process_running
+
+        trust_environment = dict(os.environ)
+        trust_environment["CODEX_BRIDGE_CHILD"] = "1"
+        for hook in (START_HOOK, STOP_HOOK):
+            source = hook.read_text(encoding="utf-8-sig")
+            self.assertIn("FEISHU_BRIDGE_HOOK_SUCCESS_STDOUT_SILENT_V1", source)
+            self.assertIn("if (-not $HookInvocation)", source)
+            self.assertEqual(1, source.count("Write-Output"))
+            hook_result = subprocess.run(
+                [
+                    str(powershell()),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(hook),
+                    "-HookInvocation",
+                ],
+                input="{}",
+                capture_output=True,
+                text=True,
+                check=False,
+                env=trust_environment,
+            )
+            self.assertEqual(0, hook_result.returncode, hook_result.stderr)
+            self.assertEqual("", hook_result.stdout)
+            manual_result = subprocess.run(
+                [
+                    str(powershell()),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(hook),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=trust_environment,
+            )
+            self.assertEqual(0, manual_result.returncode, manual_result.stderr)
+            self.assertIn(
+                "Skipping Feishu bridge lifecycle hook inside its Codex child.",
+                manual_result.stdout,
+            )
 
         with tempfile.TemporaryDirectory(dir=TEST_TEMP_ROOT) as temporary:
             project = Path(temporary)

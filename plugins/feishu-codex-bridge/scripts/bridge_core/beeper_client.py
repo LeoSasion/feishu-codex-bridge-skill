@@ -31,18 +31,18 @@ BEEPER_POST_LOAD_CLAIM_SECONDS = (
     BEEPER_CLAIM_WAIT_MAX_SECONDS
 )
 BEEPER_DEEP_LINK_PREFIX = "codex://threads/"
+QUEUE_CONTROL_PROMPT_MAX_CHARS = 512
+QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS = 1700
 QUEUE_CONTROL_PROMPT = (
-    "Feishu Bridge Beeper dial. Call the Bridge claim_and_arm "
-    "tool exactly once with this opaque page. Then call "
-    "mcp__codex_app__send_message_to_thread exactly once with only the returned "
-    "responder_thread_id, responder_host_id, and prompt. Never call "
-    "submit_final_callback in "
-    "this Beeper and ignore every native reply. Then call finish_final_callback "
-    "with the same page and wait_seconds=30; while it returns "
-    "waiting_final_callback, call it again with the same arguments. Do not execute "
-    "the business request in this Beeper, call another Desktop tool, read the "
-    "responder history, or retry the responder send. End with exactly DONT_NOTIFY after "
-    "one terminal result. Opaque page: "
+    "Beeper v1: claim_and_arm(Page) once; call "
+    "mcp__codex_app__send_message_to_thread once using only returned "
+    "responder_thread_id, responder_host_id, prompt. Never do user work, "
+    "read/inspect responder state, resend, use other Desktop tools, or call "
+    "submit_final_callback. Ignore native reply. Poll "
+    "finish_final_callback(Page, wait_seconds=30) while waiting_final_callback. "
+    "On error call fail_page once: may_have_started=false before send, true after a "
+    "send attempt. At terminal output exactly "
+    "DONT_NOTIFY. Page: "
 )
 QUEUE_READONLY_CONTROL_PROMPT = (
     "Feishu Bridge Beeper read-only dial. Call the Bridge "
@@ -71,6 +71,10 @@ QUEUE_READONLY_CONTROL_PROMPT = (
     "may_have_started=false. End with exactly DONT_NOTIFY after one terminal "
     "result. Opaque page: "
 )
+if len(QUEUE_CONTROL_PROMPT) > QUEUE_CONTROL_PROMPT_MAX_CHARS:
+    raise RuntimeError("ordinary Beeper control prompt exceeds its context budget")
+if len(QUEUE_READONLY_CONTROL_PROMPT) > QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS:
+    raise RuntimeError("read-only Beeper control prompt exceeds its context budget")
 READONLY_OPERATIONS = frozenset(
     {"list_task_catalog", "inspect_thread"}
 )

@@ -24,6 +24,18 @@ COMPACT_REQUIRED_FIELDS = frozenset(("threadId",))
 INITIALIZE_REQUIRED_FIELDS = frozenset(("clientInfo",))
 MCP_STATUS_RESPONSE_REQUIRED_FIELDS = frozenset(("data",))
 MCP_TOOL_RESPONSE_REQUIRED_FIELDS = frozenset(("content",))
+THREAD_READ_REQUIRED_FIELDS = frozenset(("threadId",))
+THREAD_READ_FIELDS = frozenset(("includeTurns", "threadId"))
+THREAD_READ_RESPONSE_REQUIRED_FIELDS = frozenset(("thread",))
+CLIENT_REQUEST_REQUIRED_FIELDS = frozenset(("id", "method", "params"))
+THREAD_OBSERVER_REQUIRED_FIELDS = frozenset(("id", "status", "turns"))
+TURN_OBSERVER_REQUIRED_FIELDS = frozenset(("id", "items", "status"))
+MCP_OBSERVER_ITEM_REQUIRED_FIELDS = frozenset(
+    ("arguments", "id", "server", "status", "tool", "type")
+)
+THREAD_STATUS_TYPES = frozenset(("active", "idle", "notLoaded", "systemError"))
+TURN_STATUS_TYPES = frozenset(("completed", "failed", "inProgress", "interrupted"))
+MCP_TOOL_CALL_STATUS_TYPES = frozenset(("completed", "failed", "inProgress"))
 JSONRPC_REQUEST_REQUIRED_FIELDS = frozenset(("id", "method"))
 JSONRPC_RESPONSE_REQUIRED_FIELDS = frozenset(("id", "result"))
 JSONRPC_ERROR_REQUIRED_FIELDS = frozenset(("error", "id"))
@@ -123,6 +135,140 @@ def _property_has_type(value: dict[str, Any], name: str, expected: str) -> bool:
     if isinstance(declared, list):
         return expected in declared
     return False
+
+
+def _schema_has_exact_type(value: Any, expected: str) -> bool:
+    return isinstance(value, dict) and value.get("type") == expected
+
+
+def _property_has_exact_type(
+    value: dict[str, Any], name: str, expected: str
+) -> bool:
+    properties = value.get("properties")
+    prop = properties.get(name) if isinstance(properties, dict) else None
+    return _schema_has_exact_type(prop, expected)
+
+
+def _definition(value: dict[str, Any], name: str) -> dict[str, Any] | None:
+    definitions = value.get("definitions")
+    definition = definitions.get(name) if isinstance(definitions, dict) else None
+    return definition if isinstance(definition, dict) else None
+
+
+def _property_schema(value: dict[str, Any], name: str) -> dict[str, Any] | None:
+    properties = value.get("properties")
+    prop = properties.get(name) if isinstance(properties, dict) else None
+    return prop if isinstance(prop, dict) else None
+
+
+def _schema_refers_to(value: Any, name: str) -> bool:
+    if not isinstance(value, dict):
+        return False
+    expected = f"#/definitions/{name}"
+    if value.get("$ref") == expected:
+        return True
+    all_of = value.get("allOf")
+    return (
+        isinstance(all_of, list)
+        and len(all_of) == 1
+        and isinstance(all_of[0], dict)
+        and all_of[0].get("$ref") == expected
+    )
+
+
+def _property_refers_to(value: dict[str, Any], field: str, name: str) -> bool:
+    return _schema_refers_to(_property_schema(value, field), name)
+
+
+def _array_property_refers_to(
+    value: dict[str, Any], field: str, name: str
+) -> bool:
+    prop = _property_schema(value, field)
+    return (
+        _schema_has_exact_type(prop, "array")
+        and isinstance(prop.get("items"), dict)
+        and prop["items"].get("$ref") == f"#/definitions/{name}"
+    )
+
+
+def _thread_item_variant(
+    thread_item: dict[str, Any] | None, item_type: str
+) -> dict[str, Any] | None:
+    one_of = thread_item.get("oneOf") if isinstance(thread_item, dict) else None
+    if not isinstance(one_of, list):
+        return None
+    matches = []
+    for candidate in one_of:
+        if not isinstance(candidate, dict):
+            continue
+        type_schema = _property_schema(candidate, "type")
+        if (
+            _schema_has_exact_type(type_schema, "string")
+            and type_schema.get("enum") == [item_type]
+        ):
+            matches.append(candidate)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _client_request_variant(
+    client_request: dict[str, Any], method: str
+) -> dict[str, Any] | None:
+    one_of = client_request.get("oneOf")
+    if not isinstance(one_of, list):
+        return None
+    matches = []
+    for candidate in one_of:
+        if not isinstance(candidate, dict):
+            continue
+        method_schema = _property_schema(candidate, "method")
+        if (
+            _schema_has_exact_type(method_schema, "string")
+            and method_schema.get("enum") == [method]
+        ):
+            matches.append(candidate)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _definition_string_enum_is_exact(
+    value: dict[str, Any], name: str, expected: frozenset[str]
+) -> bool:
+    definition = _definition(value, name)
+    if not _schema_has_exact_type(definition, "string"):
+        return False
+    enum = definition.get("enum")
+    return (
+        isinstance(enum, list)
+        and len(enum) == len(expected)
+        and all(isinstance(item, str) for item in enum)
+        and frozenset(enum) == expected
+    )
+
+
+def _definition_object_union_types_are_exact(
+    value: dict[str, Any], name: str, expected: frozenset[str]
+) -> bool:
+    definition = _definition(value, name)
+    one_of = definition.get("oneOf") if isinstance(definition, dict) else None
+    if not isinstance(one_of, list) or len(one_of) != len(expected):
+        return False
+    observed: list[str] = []
+    for candidate in one_of:
+        if (
+            not _schema_has_exact_type(candidate, "object")
+            or "type" not in _required_fields(candidate)
+        ):
+            return False
+        type_schema = _property_schema(candidate, "type")
+        enum = type_schema.get("enum") if isinstance(type_schema, dict) else None
+        if (
+            not _schema_has_exact_type(type_schema, "string")
+            or not isinstance(enum, list)
+            or len(enum) != 1
+            or not isinstance(enum[0], str)
+        ):
+            return False
+        observed.append(enum[0])
+    return len(set(observed)) == len(observed) and frozenset(observed) == expected
 
 
 def _definition_requires(value: dict[str, Any], name: str, field: str) -> bool:
@@ -236,6 +382,16 @@ def audit_contract(
         "mcp_tool_response_schema_unreadable",
         issues,
     )
+    thread_read = _load_json(
+        schema_root / "v2" / "ThreadReadParams.json",
+        "thread_read_schema_unreadable",
+        issues,
+    )
+    thread_read_response = _load_json(
+        schema_root / "v2" / "ThreadReadResponse.json",
+        "thread_read_response_schema_unreadable",
+        issues,
+    )
     desktop_manifest = _load_json(
         desktop_mcp_manifest,
         "desktop_mcp_manifest_unreadable",
@@ -346,6 +502,114 @@ def audit_contract(
     if not mcp_tool_response_shape_available:
         issues.append("mcp_tool_response_contract_changed")
 
+    thread_schema = _definition(thread_read_response, "Thread")
+    turn_schema = _definition(thread_read_response, "Turn")
+    thread_item_schema = _definition(thread_read_response, "ThreadItem")
+    mcp_observer_item = _thread_item_variant(thread_item_schema, "mcpToolCall")
+    agent_message_item = _thread_item_variant(thread_item_schema, "agentMessage")
+    reasoning_item = _thread_item_variant(thread_item_schema, "reasoning")
+    thread_read_request = _client_request_variant(client_request, "thread/read")
+    embedded_thread_read = _definition(client_request, "ThreadReadParams")
+    thread_read_shape_available = (
+        method_support["thread/read"]
+        and isinstance(thread_read_request, dict)
+        and _schema_has_exact_type(thread_read_request, "object")
+        and _required_fields(thread_read_request)
+        == CLIENT_REQUEST_REQUIRED_FIELDS
+        and _property_refers_to(
+            thread_read_request, "params", "ThreadReadParams"
+        )
+        and isinstance(embedded_thread_read, dict)
+        and _schema_has_exact_type(embedded_thread_read, "object")
+        and _required_fields(embedded_thread_read)
+        == THREAD_READ_REQUIRED_FIELDS
+        and _property_names(embedded_thread_read) == THREAD_READ_FIELDS
+        and _property_has_exact_type(
+            embedded_thread_read, "threadId", "string"
+        )
+        and _property_has_exact_type(
+            embedded_thread_read, "includeTurns", "boolean"
+        )
+        and _schema_has_exact_type(thread_read, "object")
+        and _required_fields(thread_read) == THREAD_READ_REQUIRED_FIELDS
+        and _property_names(thread_read) == THREAD_READ_FIELDS
+        and _property_has_exact_type(thread_read, "threadId", "string")
+        and _property_has_exact_type(thread_read, "includeTurns", "boolean")
+        and _schema_has_exact_type(thread_read_response, "object")
+        and _required_fields(thread_read_response)
+        == THREAD_READ_RESPONSE_REQUIRED_FIELDS
+        and _property_refers_to(thread_read_response, "thread", "Thread")
+        and isinstance(thread_schema, dict)
+        and _schema_has_exact_type(thread_schema, "object")
+        and THREAD_OBSERVER_REQUIRED_FIELDS.issubset(
+            _required_fields(thread_schema)
+        )
+        and _property_has_exact_type(thread_schema, "id", "string")
+        and _property_refers_to(thread_schema, "status", "ThreadStatus")
+        and _definition_object_union_types_are_exact(
+            thread_read_response, "ThreadStatus", THREAD_STATUS_TYPES
+        )
+        and _array_property_refers_to(thread_schema, "turns", "Turn")
+        and isinstance(turn_schema, dict)
+        and _schema_has_exact_type(turn_schema, "object")
+        and TURN_OBSERVER_REQUIRED_FIELDS.issubset(_required_fields(turn_schema))
+        and _property_has_exact_type(turn_schema, "id", "string")
+        and _property_refers_to(turn_schema, "status", "TurnStatus")
+        and _definition_string_enum_is_exact(
+            thread_read_response, "TurnStatus", TURN_STATUS_TYPES
+        )
+        and _array_property_refers_to(turn_schema, "items", "ThreadItem")
+        and isinstance(mcp_observer_item, dict)
+        and MCP_OBSERVER_ITEM_REQUIRED_FIELDS.issubset(
+            _required_fields(mcp_observer_item)
+        )
+        and _schema_has_exact_type(mcp_observer_item, "object")
+        and _property_has_exact_type(mcp_observer_item, "id", "string")
+        and _property_has_exact_type(mcp_observer_item, "server", "string")
+        and _property_has_exact_type(mcp_observer_item, "tool", "string")
+        and _property_refers_to(
+            mcp_observer_item, "status", "McpToolCallStatus"
+        )
+        and _definition_string_enum_is_exact(
+            thread_read_response,
+            "McpToolCallStatus",
+            MCP_TOOL_CALL_STATUS_TYPES,
+        )
+    )
+    if not thread_read_shape_available:
+        issues.append("thread_read_observer_contract_changed")
+
+    # The current thread/read response is useful for an isolated correlation
+    # experiment, but it is not a metadata-only API. Its schema admits answer,
+    # reasoning, MCP arguments, and MCP results. Filtering those fields after
+    # receipt can keep the public receipt answer-free; it cannot prove that the
+    # observer process never received content.
+    thread_read_content_bearing = any(
+        (
+            isinstance(agent_message_item, dict)
+            and "text" in _property_names(agent_message_item),
+            isinstance(reasoning_item, dict)
+            and bool(
+                frozenset(("content", "summary"))
+                & _property_names(reasoning_item)
+            ),
+            isinstance(mcp_observer_item, dict)
+            and bool(
+                frozenset(("arguments", "result"))
+                & _property_names(mcp_observer_item)
+            ),
+        )
+    )
+    metadata_only_projection_available = False
+    passive_observer_protocol_available = all(
+        (
+            initialized_notification_available,
+            jsonl_rpc_envelopes_available,
+            initialize_shape_available,
+            thread_read_shape_available,
+        )
+    )
+
     read_only_mvp_protocol_available = all(
         (
             initialized_notification_available,
@@ -418,6 +682,13 @@ def audit_contract(
     ]
     if send_message_requires_prompt:
         activation_blockers.append("mutating_tool_requires_prompt")
+    passive_observer_activation_blockers = [
+        "metadata_only_observer_projection_missing",
+        "cross_process_visibility_unverified",
+        "exact_turn_correlation_unverified",
+        "no_ui_impact_unverified",
+        "runtime_attestation_missing",
+    ]
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -441,6 +712,16 @@ def audit_contract(
         "mcp_status_shape_available": mcp_status_shape_available,
         "mcp_tool_response_shape_available": mcp_tool_response_shape_available,
         "read_only_mvp_protocol_available": read_only_mvp_protocol_available,
+        "thread_read_shape_available": thread_read_shape_available,
+        "thread_read_content_bearing": thread_read_content_bearing,
+        "passive_observer_protocol_available": passive_observer_protocol_available,
+        "metadata_only_projection_available": metadata_only_projection_available,
+        "observer_response_objects_closed": False,
+        "observer_requires_allowlist_projection": True,
+        "observed_runtime_correlation": False,
+        "product_caller_turn_attested": False,
+        "passive_observer_activation_allowed": False,
+        "passive_observer_activation_blockers": passive_observer_activation_blockers,
         "desktop_task_coordination_certified": False,
         "runtime_attestation_required": True,
         "activation_allowed": False,
@@ -470,6 +751,9 @@ def main() -> int:
     else:
         print(f"App Server static contract: {result['status']}")
         print("Activation allowed: no")
+        print("Passive observer activation allowed: no")
+        if result["thread_read_content_bearing"]:
+            print("thread/read is content-bearing; no metadata-only projection is approved.")
         if result["issues"]:
             print("Issues: " + ", ".join(result["issues"]))
         print("A separate runtime attestation is required before any live probe.")

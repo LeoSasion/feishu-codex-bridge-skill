@@ -9,7 +9,7 @@ import re
 from typing import Mapping
 
 
-BRIDGE_VERSION = "4.2.0-alpha.64"
+BRIDGE_VERSION = "4.2.0-alpha.66"
 
 BOOLEAN_ENV_DEFAULTS = {
     "CODEX_BRIDGE_DOWNLOAD_RESOURCES": True,

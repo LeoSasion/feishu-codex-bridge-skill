@@ -1,10 +1,14 @@
 # App Server read-only capability boundary
 
-This reference defines the only admissible App Server experiment: a bounded,
-owner-requested, read-only capability probe. It is not a Bridge backend, a
-Desktop producer, a responder client, or an activation path. The current Bridge has
+This reference defines the only admissible App Server experiments: bounded,
+owner-requested, read-only capability probes. They are not a Bridge backend, a
+Desktop producer, a responder controller, a final transport, or an activation
+path. The current Bridge has
 one admitted isolated `beeper` local producer; App Server is not
-part of it and must never supplement, replace, or recover that route.
+part of it and must never supplement or replace that producer route, act as a
+responder controller or final transport, or recover/replay it. A passive
+observer may contribute only non-authoritative audit evidence under the gates
+below.
 
 ## Current conclusion
 
@@ -20,6 +24,22 @@ closed with `runtime_provenance_unavailable`, `static_inputs_bound=true`,
 `desktop_task_coordination_certified` and `activation_allowed` remain false.
 This is a capability boundary, not a reason to add an SDK, App Server writer, or
 another fallback route.
+
+The accepted role split is: Desktop executes and owns the task, Final Callback
+delivers the responder's authoritative final, and a separately authorized App
+Server may only observe. Observation does not require transferring control of the
+Desktop task. It must not resume the task, start a turn, subscribe as a live task
+client, mutate state, or affect normal Desktop display.
+
+The current independent CLI Schema declares `threadId` and `includeTurns` as its
+two named `thread/read` request properties; a future observer is allowed to send
+only those two fields. The response schema permits structured thread, turn, and
+`mcpToolCall` items and is content-bearing: when such material is persisted and
+supported, it may return answer text, reasoning content/summary, MCP arguments,
+and MCP results. There is no schema-guaranteed metadata-only projection. Therefore the protocol is
+a useful provenance-correlation candidate, but it is not currently admitted as
+an unattended live sensor. Filtering after receipt can make the retained receipt
+answer-free; it cannot prove the isolated observer process never received content.
 
 ## Admission and ownership
 
@@ -38,7 +58,7 @@ The controller must not read, copy, print, persist, synthesize, or return
 `CODEX_APP_TOOLS_PIPE_PATH`. An ambiguous launch, disconnect, timeout, or shutdown
 consumes the attempt and is not replayed.
 
-## Exact read-only sequence
+## Existing catalog-probe sequence
 
 The protocol core in `scripts/app_server_mvp.py` may perform only this sequence:
 
@@ -59,6 +79,36 @@ Every request shares one absolute deadline across write, response, and notificat
 reads; notifications never extend it. A transport unable to enforce the supplied
 remaining timeout is outside the contract.
 
+## Passive provenance-observer candidate
+
+This candidate is a separate lane from `scripts/app_server_mvp.py`; the existing
+catalog probe must not be widened into a responder-history reader. A future
+isolated observer may perform only `initialize`, `initialized`, and one bounded
+`thread/read(includeTurns=true)` for one exact owner-supplied task ID. It must not
+use `thread/resume`, `turn/start`, `thread/compact/start`, notifications as a
+subscription, or any MCP/task tool.
+
+The raw response may exist only in the isolated process for the duration of that
+attempt. It must not be logged, printed, persisted, returned, or placed in Bridge
+SQLite. The public result may contain only fixed enums/booleans/counts describing
+whether exact thread/turn/item structure and the named Final Callback tool event
+were observed. It must omit every ID, text field, reasoning field, argument,
+result, error body, path, capability, digest derived from private content, and
+final. Current response objects are not closed against future fields, so any
+future observer must construct a new allowlist projection rather than delete
+known sensitive fields from the raw response. Observer failure yields only
+`provenance_unavailable`; it never changes delivery, replays a Page, or weakens
+Final Callback validation.
+
+Before this lane can enter any live route, controlled evidence must independently
+prove cross-process visibility, active-turn persistence timing, exact task/turn
+correlation, minimum disclosure, no Desktop UI/control impact, and fault
+isolation. Even after those gates, name the result
+`observed_runtime_correlation`, not product attestation, unless the product later
+provides immutable caller/turn attestation. The current Beeper prompt does not ask
+the model to self-attest, so this candidate prevents future context growth rather
+than reducing the already-minimal Page today.
+
 ## Host and receipt contract
 
 `scripts/app_server_host.py` validates the exact executable and static digests,
@@ -77,7 +127,7 @@ errors or private values. Missing channel, MCP, caller identity, tools, malforme
 results, or deadline is classified as `desktop_task_port_unavailable` without a
 fallback.
 
-## Absolute no-second-client boundary
+## Absolute no-second-controller boundary
 
 The Beeper is an identity anchor for read-only MCP calls, never a writer for
 a Desktop-owned responder. The probe must never:
@@ -90,7 +140,8 @@ a Desktop-owned responder. The probe must never:
   callbacks, or
   contact Feishu;
 - let Bridge, CLI, App Server, SDK, database, rollout, named pipe, deep link, UI,
-  OCR, clipboard, or transcript extraction become another responder client; or
+  OCR, clipboard, or transcript extraction become another responder controller,
+  turn owner, or reply fallback; or
 - reconstruct or export the transient Desktop channel.
 
 The separately admitted exact-UUID Beeper cold-load deep link is not an App
@@ -116,8 +167,10 @@ python scripts/app_server_contract.py `
 
 A static pass means only that the reviewed current shapes still exist, including
 `mcpServer/tool/call`, required thread ownership fields, transient channel
-declaration, native tool forwarding, and the approval-gated task-tool declaration.
-It never launches a process or proves which source serves a live call.
+declaration, native tool forwarding, the approval-gated task-tool declaration,
+and the content-bearing `thread/read` observer shape. The auditor separately
+reports that no metadata-only projection or observer activation is available. It
+never launches a process or proves which source serves a live call.
 
 Only after the admission checks may the separately authorized owner invoke the
 bounded host:
@@ -145,7 +198,8 @@ branching on old version numbers. If a required shape changes, fail closed and a
 the single current implementation. Do not retain the replaced adapter as an
 executable compatibility path.
 
-If the product later exposes immutable runtime-source identity, define and validate
-a new closed provenance contract before drawing a stronger conclusion. Do not
-reinterpret an older receipt, relax responder ownership, or attach App Server to a
-Desktop-owned responder.
+If the product later exposes a metadata-only read projection or immutable
+runtime-source/caller-turn identity, define and validate a new closed provenance
+contract before drawing a stronger conclusion. Do not reinterpret an older
+receipt, relax responder ownership, or let App Server control a Desktop-owned
+responder.

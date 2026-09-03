@@ -72,14 +72,19 @@
   model/reasoning settings, approvals, tools, Skills, plugins, browser, Computer
   Use, files, knowledge access, execution, context, and final answer.
 - Bridge, Beeper, shell, App Server, SDK, database, rollout, named pipe, UI,
-  OCR, clipboard, and transcript extraction must never become
-  an alternate responder client or reply fallback. The exact CLI queue exception and its one
+  OCR, clipboard, and transcript extraction must never become an alternate
+  responder controller, turn owner, or reply fallback. The exact CLI queue exception and its one
   exact-UUID deep-link cold-load assist may address only the Beeper, never a
   business responder, and the deep link is never a final transport.
+- A separately owner-requested App Server probe may evaluate non-exclusive,
+  no-resume, no-mutation observation of one exact Desktop task under
+  `references/app-server-probe.md`. It remains outside the resident Bridge and
+  final route. Because the current `thread/read` shape is content-bearing and has
+  no metadata-only projection, it is not an unattended live sensor and grants no
+  activation authority until its disclosure and no-UI-impact gates are proven.
 - App Server Schema generation is read-only version evidence, not permission to
-  launch, resume, attach to, or mutate a responder. Any separately owner-requested
-  read-only capability probe must follow `references/app-server-probe.md` and
-  still returns no activation authority.
+  control, resume, create a turn in, or mutate a responder. It may qualify the
+  separately authorized observer experiment above, but never a second task controller.
 
 ### Identity, fencing, replay, and retention
 

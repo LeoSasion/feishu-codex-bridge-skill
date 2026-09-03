@@ -234,7 +234,7 @@ $paths = @(
         Microsoft.PowerShell.Utility\ConvertFrom-Json
 )
 $cases = @(
-    [pscustomobject]@{ name = 'signed-pass'; expected = $true; json = '{"status":"pass","installed_manifest":{"present":true,"valid":true,"bridge_version":"4.2.0-alpha.64","issue_count":0,"issue_codes":[]},"health_issue":null}' },
+    [pscustomobject]@{ name = 'signed-pass'; expected = $true; json = '{"status":"pass","installed_manifest":{"present":true,"valid":true,"bridge_version":"4.2.0-alpha.66","issue_count":0,"issue_codes":[]},"health_issue":null}' },
     [pscustomobject]@{ name = 'hook-refresh-warning'; expected = $true; json = '{"status":"warning","installed_manifest":{"present":false,"valid":false,"bridge_version":null,"issue_count":1,"issue_codes":["integrity_check_failed"]},"health_issue":null}' },
     [pscustomobject]@{ name = 'present-invalid'; expected = $false; json = '{"status":"warning","installed_manifest":{"present":true,"valid":false,"bridge_version":null,"issue_count":1,"issue_codes":["integrity_check_failed"]},"health_issue":null}' },
     [pscustomobject]@{ name = 'stale-version'; expected = $false; json = '{"status":"warning","installed_manifest":{"present":false,"valid":false,"bridge_version":"old","issue_count":1,"issue_codes":["integrity_check_failed"]},"health_issue":null}' },

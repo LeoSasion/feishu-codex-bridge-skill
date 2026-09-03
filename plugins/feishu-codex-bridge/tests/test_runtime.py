@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import threading
@@ -2858,6 +2859,57 @@ class DesktopBeeperPromptContractTests(unittest.TestCase):
                 text,
                 r"```[^\r\n]*\r?\n(?:(?!```).)*(?:beeper_queue_cli\.py|desktop-beeper-[\w-]+\.md)(?:(?!```).)*```",
             )
+
+        skill = SKILL_DOC.read_text(encoding="utf-8")
+        permissions = PERMISSIONS_HOOKS_DOC.read_text(encoding="utf-8")
+        usage = USAGE_DOC.read_text(encoding="utf-8")
+        skill_section_match = re.search(
+            r"## 可见 Hook 审核入口(.*?)(?:\r?\n## |\Z)",
+            skill,
+            flags=re.DOTALL,
+        )
+        permissions_section_match = re.search(
+            r"## 8\. Hook file and trust(.*?)(?:\r?\n## |\Z)",
+            permissions,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(skill_section_match)
+        self.assertIsNotNone(permissions_section_match)
+        for section_match in (skill_section_match, permissions_section_match):
+            cmd_blocks = re.findall(
+                r"```cmd\r?\n(.*?)```",
+                section_match.group(1),
+                flags=re.DOTALL,
+            )
+            self.assertEqual(2, len(cmd_blocks))
+            discovery_block, launch_block = cmd_blocks
+            self.assertEqual(
+                ['cd /d "<project-root>"', "where codex.cmd"],
+                discovery_block.splitlines(),
+            )
+            self.assertEqual(
+                [
+                    'set "CODEX_BRIDGE_CHILD=1"',
+                    "codex.cmd",
+                    'set "CODEX_BRIDGE_CHILD="',
+                ],
+                launch_block.splitlines(),
+            )
+            for cmd_block in cmd_blocks:
+                self.assertNotRegex(cmd_block, r"(?i)(?:[a-z]:\\|\\\\)")
+                self.assertNotIn("codex.cmd /hooks", cmd_block)
+        for text in (skill, permissions, usage):
+            self.assertIn("Codex Desktop", text)
+            self.assertIn("`/hooks`", text)
+            self.assertIn("Windows CMD", text)
+            self.assertIn("Trust all", text)
+        self.assertIn("首选 Codex Desktop 的“设置 → 钩子”", skill)
+        self.assertIn("Windows CMD 作为备选", skill)
+        self.assertIn("Codex Desktop Settings >", permissions)
+        self.assertIn("Use Windows CMD only as a fallback", permissions)
+        self.assertIn("首选 Codex Desktop“设置 → 钩子”", usage)
+        self.assertIn("在交互式 Codex CLI 内输入 `/hooks`", skill)
+        self.assertRegex(permissions, r"`/hooks`\s+is an interactive CLI command")
 
     def test_current_send_is_final_callback_sealed_and_unsupported_steer_is_rejected(self) -> None:
         beeper = BEEPER_SOURCE.read_text(encoding="utf-8")

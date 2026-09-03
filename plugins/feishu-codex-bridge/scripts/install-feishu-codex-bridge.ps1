@@ -29,6 +29,7 @@ $envTarget = Join-Path $runtimeRoot 'bridge.env'
 $runtimeManifestTarget = Join-Path $runtimeRoot 'runtime-manifest.json'
 $hooksConfigPath = Join-Path $resolvedProjectRoot '.codex\hooks.json'
 $backupRoot = Join-Path $runtimeRoot ('backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$historicalStoppedHealthValidated = $false
 
 function Get-BridgeProcessIdentity {
     param(
@@ -60,6 +61,274 @@ function Get-BridgeProcessIdentity {
         IsBridge = $observed.IndexOf($expected, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
         ProcessName = $processName
     }
+}
+
+function Test-InstallerJsonInteger {
+    param(
+        [AllowNull()]$Value,
+        [long]$Minimum = 0
+    )
+
+    if ($Value -isnot [int] -and $Value -isnot [long]) { return $false }
+    try {
+        return [long]$Value -ge $Minimum
+    } catch {
+        return $false
+    }
+}
+
+function Test-InstallerJsonNumber {
+    param([AllowNull()]$Value)
+
+    if ($Value -isnot [int] -and
+        $Value -isnot [long] -and
+        $Value -isnot [single] -and
+        $Value -isnot [double] -and
+        $Value -isnot [decimal]) {
+        return $false
+    }
+    try {
+        $number = [double]$Value
+        return -not [double]::IsNaN($number) -and -not [double]::IsInfinity($number)
+    } catch {
+        return $false
+    }
+}
+
+function Test-ExactHistoricalStoppedHealthSnapshot {
+    param(
+        [AllowNull()]$Health,
+        [Parameter(Mandatory = $true)][string[]]$SupportedVersions
+    )
+
+    if ($null -eq $Health) { return $false }
+    [string[]]$expectedTopKeys = @(
+        'access_configured',
+        'access_mode',
+        'actionable_retryable_failed',
+        'active_turns',
+        'beeper_queue',
+        'beeper_state',
+        'beeper_transport',
+        'bridge_version',
+        'event_consumer',
+        'last_event_at',
+        'latest_delivery_fidelity',
+        'mvp_observation',
+        'pid',
+        'queue',
+        'responder_writer',
+        'runtime_manifest_sha256',
+        'session_owner',
+        'started_at',
+        'status',
+        'updated_at'
+    ) | Sort-Object
+    [string[]]$actualTopKeys = @(
+        $Health.PSObject.Properties.Name | ForEach-Object { [string]$_ } | Sort-Object
+    )
+    if (($actualTopKeys -join "`n") -cne ($expectedTopKeys -join "`n") -or
+        $Health.bridge_version -isnot [string] -or
+        [string]$Health.bridge_version -cnotin $SupportedVersions -or
+        $Health.status -isnot [string] -or [string]$Health.status -cne 'stopped' -or
+        -not (Test-InstallerJsonInteger -Value $Health.pid -Minimum 1) -or
+        -not (Test-InstallerJsonNumber -Value $Health.started_at) -or
+        [double]$Health.started_at -le 0 -or
+        -not (Test-InstallerJsonNumber -Value $Health.updated_at) -or
+        [double]$Health.updated_at -lt [double]$Health.started_at -or
+        $Health.runtime_manifest_sha256 -isnot [string] -or
+        [string]$Health.runtime_manifest_sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $Health.event_consumer -isnot [bool] -or [bool]$Health.event_consumer -or
+        $Health.session_owner -isnot [string] -or [string]$Health.session_owner -cne 'beeper' -or
+        $Health.beeper_transport -isnot [string] -or
+        [string]$Health.beeper_transport -cne 'historical-desktop-beeper-tombstoned' -or
+        $Health.beeper_state -isnot [string] -or
+        [string]$Health.beeper_state -cne 'historical-producer-tombstoned' -or
+        $Health.responder_writer -isnot [string] -or
+        [string]$Health.responder_writer -cne 'desktop-task-only' -or
+        -not (Test-InstallerJsonInteger -Value $Health.active_turns) -or
+        [long]$Health.active_turns -ne 0 -or
+        -not (Test-InstallerJsonInteger -Value $Health.actionable_retryable_failed) -or
+        [long]$Health.actionable_retryable_failed -ne 0 -or
+        $null -ne $Health.mvp_observation -or
+        $Health.access_mode -isnot [string] -or
+        [string]$Health.access_mode -cnotin @('locked', 'compat') -or
+        $Health.access_configured -isnot [bool] -or
+        ($null -ne $Health.last_event_at -and
+            (-not (Test-InstallerJsonNumber -Value $Health.last_event_at) -or
+             [double]$Health.last_event_at -le 0))) {
+        return $false
+    }
+
+    $beeper = $Health.beeper_queue
+    [string[]]$expectedBeeperKeys = @(
+        'claimed', 'dial_inflight', 'dial_lease_remaining_seconds', 'pending'
+    ) | Sort-Object
+    [string[]]$actualBeeperKeys = @(
+        $beeper.PSObject.Properties.Name | ForEach-Object { [string]$_ } | Sort-Object
+    )
+    if ($null -eq $beeper -or
+        ($actualBeeperKeys -join "`n") -cne ($expectedBeeperKeys -join "`n") -or
+        $beeper.dial_inflight -isnot [bool] -or [bool]$beeper.dial_inflight -or
+        $null -ne $beeper.dial_lease_remaining_seconds -or
+        -not (Test-InstallerJsonInteger -Value $beeper.pending) -or [long]$beeper.pending -ne 0 -or
+        -not (Test-InstallerJsonInteger -Value $beeper.claimed) -or [long]$beeper.claimed -ne 0) {
+        return $false
+    }
+
+    $queue = $Health.queue
+    [string[]]$expectedQueueKeys = @(
+        'completed',
+        'control_sending',
+        'queued',
+        'reply_pending',
+        'retryable_failed',
+        'running',
+        'terminal_failed'
+    ) | Sort-Object
+    [string[]]$actualQueueKeys = @(
+        $queue.PSObject.Properties.Name | ForEach-Object { [string]$_ } | Sort-Object
+    )
+    if ($null -eq $queue -or
+        ($actualQueueKeys -join "`n") -cne ($expectedQueueKeys -join "`n")) {
+        return $false
+    }
+    foreach ($name in $expectedQueueKeys) {
+        if (-not (Test-InstallerJsonInteger -Value $queue.$name)) { return $false }
+    }
+    foreach ($name in @('queued', 'running', 'control_sending', 'reply_pending')) {
+        if ([long]$queue.$name -ne 0) { return $false }
+    }
+
+    $delivery = $Health.latest_delivery_fidelity
+    [string[]]$expectedDeliveryKeys = @('fidelity', 'transforms') | Sort-Object
+    [string[]]$actualDeliveryKeys = @(
+        $delivery.PSObject.Properties.Name | ForEach-Object { [string]$_ } | Sort-Object
+    )
+    if ($null -eq $delivery -or
+        ($actualDeliveryKeys -join "`n") -cne ($expectedDeliveryKeys -join "`n") -or
+        $delivery.fidelity -isnot [string] -or
+        [string]$delivery.fidelity -cnotin @(
+            'identity', 'explicit_transform', 'unknown', 'not_applicable'
+        )) {
+        return $false
+    }
+    $transformValues = @($delivery.transforms)
+    if (@($transformValues | Where-Object { $_ -isnot [string] }).Count -gt 0) {
+        return $false
+    }
+    [string[]]$transforms = @($transformValues | ForEach-Object { [string]$_ })
+    [string[]]$allowedTransforms = @(
+        'attachment_marker',
+        'attachment_omitted',
+        'chunking',
+        'empty_fallback',
+        'markdown'
+    )
+    if (@($transforms | Where-Object { $_ -cnotin $allowedTransforms }).Count -gt 0 -or
+        @($transforms | Select-Object -Unique).Count -ne $transforms.Count -or
+        ([string]$delivery.fidelity -ceq 'explicit_transform' -and $transforms.Count -eq 0) -or
+        ([string]$delivery.fidelity -cne 'explicit_transform' -and $transforms.Count -gt 0)) {
+        return $false
+    }
+    return $true
+}
+
+function Test-HistoricalHealthManifestBinding {
+    param([Parameter(Mandatory = $true)]$Health)
+
+    [System.Collections.Generic.List[string]]$candidatePaths = @()
+    if (Test-Path -LiteralPath $runtimeManifestTarget -PathType Leaf) {
+        $candidatePaths.Add($runtimeManifestTarget)
+    }
+    $backupsPath = Join-Path $runtimeRoot 'backups'
+    if (Test-Path -LiteralPath $backupsPath -PathType Container) {
+        $backupsInfo = Get-Item -LiteralPath $backupsPath -Force -ErrorAction Stop
+        if (($backupsInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+            foreach ($backupDirectory in @(Get-ChildItem -LiteralPath $backupsPath -Directory -Force)) {
+                if (($backupDirectory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                    $backupDirectory.Name -cnotmatch '^\d{8}-\d{6}$') {
+                    continue
+                }
+                $candidate = Join-Path $backupDirectory.FullName 'runtime-manifest.json'
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    $candidatePaths.Add($candidate)
+                }
+            }
+        }
+    }
+
+    foreach ($candidatePath in $candidatePaths) {
+        $candidateInfo = Get-Item -LiteralPath $candidatePath -Force -ErrorAction Stop
+        if ($candidateInfo.PSIsContainer -or
+            ($candidateInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            continue
+        }
+        $digest = (Get-FileHash -LiteralPath $candidateInfo.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($digest -cne [string]$Health.runtime_manifest_sha256) { continue }
+        try {
+            $manifest = Get-Content -LiteralPath $candidateInfo.FullName -Raw -Encoding utf8 |
+                ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            continue
+        }
+        if ((Test-InstallerJsonInteger -Value $manifest.schema_version -Minimum 1) -and
+            [long]$manifest.schema_version -eq 1 -and
+            $manifest.bridge_version -is [string] -and
+            [string]$manifest.bridge_version -ceq [string]$Health.bridge_version) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Assert-HistoricalStoppedHealthPreflight {
+    $healthPath = Join-Path $runtimeRoot 'health.json'
+    if (-not (Test-Path -LiteralPath $healthPath)) { return }
+
+    $runtimeInfo = Get-Item -LiteralPath $runtimeRoot -Force -ErrorAction Stop
+    $healthInfo = Get-Item -LiteralPath $healthPath -Force -ErrorAction Stop
+    $expectedRuntimePath = [System.IO.Path]::GetFullPath($runtimeRoot)
+    $expectedHealthPath = [System.IO.Path]::GetFullPath($healthPath)
+    if (-not $runtimeInfo.PSIsContainer -or
+        ($runtimeInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        -not $runtimeInfo.FullName.Equals($expectedRuntimePath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $healthInfo.PSIsContainer -or
+        ($healthInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        -not $healthInfo.FullName.Equals($expectedHealthPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not $healthInfo.DirectoryName.Equals($expectedRuntimePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Bridge health snapshot is not the exact ordinary runtime leaf; refusing historical preflight.'
+    }
+    try {
+        $health = Get-Content -LiteralPath $healthInfo.FullName -Raw -Encoding utf8 |
+            ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "Bridge health snapshot is invalid; refusing historical preflight: $($_.Exception.Message)"
+    }
+
+    $historicalTransport = (
+        $health.beeper_transport -is [string] -and
+        [string]$health.beeper_transport -ceq 'historical-desktop-beeper-tombstoned'
+    )
+    $historicalState = (
+        $health.beeper_state -is [string] -and
+        [string]$health.beeper_state -ceq 'historical-producer-tombstoned'
+    )
+    if (-not $historicalTransport -and -not $historicalState) { return }
+    if (-not $historicalTransport -or
+        -not $historicalState -or
+        -not (Test-ExactHistoricalStoppedHealthSnapshot `
+            -Health $health `
+            -SupportedVersions @(
+                '4.2.0-alpha.63',
+                '4.2.0-alpha.64',
+                '4.2.0-alpha.65',
+                '4.2.0-alpha.66'
+            )) -or
+        -not (Test-HistoricalHealthManifestBinding -Health $health)) {
+        throw 'Historical tombstoned Beeper health preflight failed before installation writes.'
+    }
+    $script:historicalStoppedHealthValidated = $true
 }
 
 function Assert-BridgeStopped {
@@ -169,6 +438,7 @@ if (-not $HooksOnly -and $SkipHooks) {
     # is safe only after the installed hook already knows this manifest schema.
     Assert-ManifestCapableHooks
 }
+Assert-HistoricalStoppedHealthPreflight
 
 Write-Output 'Installer leaves project AGENTS.md rules unchanged; run bridge init as a separately observable automatic transaction.'
 
@@ -461,8 +731,32 @@ function Convert-RetiredStoppedHealthSnapshot {
                 'beeper-unavailable'
             )
         )
+        $historicalTransport = (
+            $health.beeper_transport -is [string] -and
+            [string]$health.beeper_transport -ceq 'historical-desktop-beeper-tombstoned'
+        )
+        $historicalState = (
+            $health.beeper_state -is [string] -and
+            [string]$health.beeper_state -ceq 'historical-producer-tombstoned'
+        )
 
         if ($newTransport -and $newState -and -not $oldObservationProperty -and $observationProperty) {
+            return
+        }
+        if ($historicalTransport -and $historicalState) {
+            if ($oldObservationProperty -or
+                -not (Test-ExactHistoricalStoppedHealthSnapshot `
+                    -Health $health `
+                    -SupportedVersions @(
+                        '4.2.0-alpha.63',
+                        '4.2.0-alpha.64',
+                        '4.2.0-alpha.65',
+                        '4.2.0-alpha.66'
+                    )) -or
+                -not (Test-HistoricalHealthManifestBinding -Health $health)) {
+                throw 'Historical tombstoned Beeper health metadata is not exactly stopped and idle; refusing migration.'
+            }
+            $script:historicalStoppedHealthValidated = $true
             return
         }
         if (-not $oldTransport -or -not $oldState -or -not $oldObservationProperty -or $observationProperty) {
@@ -565,7 +859,7 @@ function Convert-RetiredStoppedHealthSnapshot {
 }
 
 function Write-BridgeRuntimeManifest {
-    $expectedVersion = '4.2.0-alpha.64'
+    $expectedVersion = '4.2.0-alpha.66'
     $runtimeFiles = @(
         'bridge.py',
         'beeper_queue_cli.py',
@@ -656,12 +950,42 @@ function Update-InstalledStoppedHealthSnapshot {
     [string[]]$expectedBeeperKeys = @(
         'claimed', 'pending', 'dial_inflight', 'dial_lease_remaining_seconds'
     ) | Sort-Object
+    $liveBeeperStatePair = (
+        $health.beeper_transport -is [string] -and
+        [string]$health.beeper_transport -ceq 'codex-queue' -and
+        $health.beeper_state -is [string] -and
+        [string]$health.beeper_state -cin @(
+            'beeper-registered-load-unobserved',
+            'beeper-unavailable'
+        )
+    )
+    $historicalBeeperStatePair = (
+        $health.beeper_transport -is [string] -and
+        [string]$health.beeper_transport -ceq 'historical-desktop-beeper-tombstoned' -and
+        $health.beeper_state -is [string] -and
+        [string]$health.beeper_state -ceq 'historical-producer-tombstoned'
+    )
+    $observationProperty = $health.PSObject.Properties['mvp_observation']
+    $historicalSnapshotValid = (
+        -not $historicalBeeperStatePair -or
+        ($script:historicalStoppedHealthValidated -and
+         (Test-ExactHistoricalStoppedHealthSnapshot `
+            -Health $health `
+            -SupportedVersions @(
+                '4.2.0-alpha.63',
+                '4.2.0-alpha.64',
+                '4.2.0-alpha.65',
+                '4.2.0-alpha.66'
+            )))
+    )
     if (($actualBeeperKeys -join "`n") -cne ($expectedBeeperKeys -join "`n") -or
         $health.status -isnot [string] -or [string]$health.status -cne 'stopped' -or
         $health.event_consumer -isnot [bool] -or [bool]$health.event_consumer -or
         -not (& $isIntegerZero $health.active_turns) -or
         $health.session_owner -isnot [string] -or [string]$health.session_owner -cne 'beeper' -or
-        $health.beeper_transport -isnot [string] -or [string]$health.beeper_transport -cne 'codex-queue' -or
+        (-not $liveBeeperStatePair -and -not $historicalBeeperStatePair) -or
+        -not $historicalSnapshotValid -or
+        ($historicalBeeperStatePair -and (-not $observationProperty -or $null -ne $observationProperty.Value)) -or
         $health.responder_writer -isnot [string] -or [string]$health.responder_writer -cne 'desktop-task-only' -or
         $null -eq $queue -or
         -not (& $isIntegerZero $queue.queued) -or
@@ -676,7 +1000,7 @@ function Update-InstalledStoppedHealthSnapshot {
         throw 'Installed Bridge health is not exactly stopped and idle; refusing version refresh.'
     }
 
-    $health.bridge_version = '4.2.0-alpha.64'
+    $health.bridge_version = '4.2.0-alpha.66'
     $health.runtime_manifest_sha256 = (
         Get-FileHash -LiteralPath $runtimeManifestTarget -Algorithm SHA256 -ErrorAction Stop
     ).Hash.ToLowerInvariant()

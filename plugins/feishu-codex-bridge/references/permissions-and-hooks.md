@@ -72,8 +72,12 @@ the isolated queue experiment. Discover both without launching a responder:
   them from a remembered version. Capability absence fails closed.
 
 Every actual Codex invocation is a separate bounded transaction. Schema
-generation is read-only provenance; it never authorizes App Server launch,
-responder attachment, or a second responder client. The queue exception accepts only
+generation is read-only provenance; it never authorizes App Server control,
+resume, turn creation, mutation, or a second responder controller. A separately
+owner-requested standalone observer may evaluate only the no-resume/no-mutation
+path defined in `app-server-probe.md`; it is not part of Bridge lifecycle or the
+final route, and current content-bearing `thread/read` has no unattended-live
+authority. The queue exception accepts only
 `queue --thread <exact Beeper UUID> --message <opaque page>` with no shell.
 After queue exit 0 and a fixed grace, the same still-reserved page may cause
 one `codex://threads/<exact Beeper UUID>` open. The URI has no query or payload,
@@ -160,8 +164,10 @@ Every selected Desktop responder remains the sole owner of its conversation,
 project, context, model, tools, approvals, execution, and final. Bridge,
 Beeper, shell, CLI, App Server, SDK, database, rollout, named pipe, deep link,
 UI, OCR, clipboard, and transcript extraction must never become an alternate
-responder client or reply fallback. The admitted exact Beeper-only deep link loads
-no business responder and is never a reply transport.
+responder controller, turn owner, or reply/final fallback. The separately
+owner-requested, no-resume/no-mutation observer exception is limited by
+`app-server-probe.md`; it does not transfer ownership. The admitted exact
+Beeper-only deep link loads no business responder and is never a reply transport.
 
 ## 5. Ideal product `run_once`
 
@@ -210,6 +216,15 @@ lease, or a missing Desktop host fails closed without falling back to direct
 Hook-child launch. The parent Hook releases the lifecycle mutex before its
 bounded exact-PID observation. The stop Hook releases only its matching lease;
 a manual stop releases all local leases.
+
+Successful `-HookInvocation` execution is stdout-silent so lifecycle status does
+not become model-visible developer context. Direct/manual and detached-launch
+operations retain concise operator output, while failures remain nonzero and
+visible on stderr. The installed manifest binds the exact Hook bytes, and
+`doctor -Json` reports the answer-free configuration, manifest-binding, and
+success-output facts. These machine checks narrow review to loaded-source
+uniqueness and exact trust; they cannot observe or replace the Codex Hook
+browser's cross-layer and trust decisions.
 
 `bridge.pid` is an untrusted reference. Start, stop, upgrade, and status
 decisions require a Python process whose command line contains the exact
@@ -278,16 +293,53 @@ the plugin contains no `hooks/hooks.json` and adds no `UserPromptSubmit` or
 `Stop` row. Any such plugin row belongs to an older installed snapshot and must
 not be trusted as current source.
 
-Use the currently supported visible Hook surface. Run trust-only review with
-`CODEX_BRIDGE_CHILD=1`; lifecycle scripts must exit before lease or process
-mutation. Trust each exact Bridge row, allow unrelated rows to remain pending,
-and never infer Hook trust from project or rule trust. Any byte, path, matcher,
-command, or timeout change requires a new exact review.
+The machine audit scans every project Hook event for either Bridge lifecycle
+script leaf name. An extra retired-path, wrong-event, mixed, or otherwise
+non-exact Bridge handler invalidates project Hook configuration instead of being
+ignored merely because the two current exact-path handlers are also present.
+The `SessionStart` matcher must be exactly `startup|resume`; the `SessionEnd`
+matcher must be absent so lease release applies to every supported end reason.
+Matcher-group `hooks` values remain JSON arrays, and timeout values remain JSON
+integers; string coercion is not accepted as proof of the installed shape.
 
-Prefer the supported automated trust path. If only a visible platform review is
-available, request that single interaction and continue afterward. If no
-trustworthy review surface exists, report a blocker; do not bypass it with a
-manual Bridge start.
+The preferred visible review surface on Windows is **Codex Desktop Settings >
+Hooks**. The Desktop conversation composer does not expose `/hooks`, but the
+Settings surface can review trust and enable or disable individual entries.
+Review the exact current project source there, trust and enable only its Bridge
+`SessionStart` and `SessionEnd` rows individually, allow unrelated rows to remain
+pending, and never use `Trust all`.
+
+Use Windows CMD only as a fallback when that Settings surface is unavailable or
+an independent CLI review is needed. Open CMD at the exact project root and
+locate the independently installed official Codex CLI first:
+
+```cmd
+cd /d "<project-root>"
+where codex.cmd
+```
+
+Do not continue until the result is unique and verified as the official shim
+described in section 2. Then launch the review-only CLI:
+
+```cmd
+set "CODEX_BRIDGE_CHILD=1"
+codex.cmd
+set "CODEX_BRIDGE_CHILD="
+```
+
+`where codex.cmd` must resolve the verified official `@openai/codex` shim
+described in section 2 without a hard-coded user profile, Node version, or
+Desktop WindowsApps path. If it returns no candidate or an ambiguous set, stop
+and complete that discovery/installation check before launching. Once the
+interactive CLI opens, enter `/hooks` there. `CODEX_BRIDGE_CHILD=1` makes this a
+trust-only review; lifecycle scripts must exit before lease or process mutation,
+and the final CMD line clears the temporary flag after the CLI exits. `/hooks`
+is an interactive CLI command, not a CMD command or a `codex.cmd` argument.
+
+Never infer Hook trust from project or rule trust. Any byte, path, matcher,
+command, or timeout change requires a new exact review. If neither Desktop
+Settings nor the CLI provides a trustworthy review surface, report a blocker;
+do not bypass it with a manual Bridge start.
 
 ## 9. Diagnostics and evidence
 

@@ -17,6 +17,16 @@ and may consume one Bridge-owned local grant before making one bounded invocatio
 of the exact registered Desktop-bundled CLI. The CLI receives only an opaque
 page and the exact newly created Beeper task ID.
 
+The ordinary per-Page control prefix remains self-contained after task
+compaction but is capped at 512 characters; it carries only the lane, exact-once
+tool sequence, no-readback/no-replay boundary, failure side of the send boundary,
+and terminal output rule. The lower-frequency read-only setup prefix keeps its
+closed mapping contract and is capped at 1700 characters. Unit tests bind both
+prefixes to the opaque 32-character Page and reject accidental business text or
+Responder identity in the CLI argv. The detailed `beeper-task.md` remains a
+creation-time role contract, not a per-Page runtime injection or an attested
+substitute for these bounded self-contained controls.
+
 ```text
 Feishu event -> Bridge durable inbox -> consume local grant
   -> codex queue(exact Beeper, opaque page)
@@ -279,7 +289,7 @@ The public `bridge init` command only merges project policy. It is not the
 Bridge `/init` handler and does not create a producer or add Beeper allow
 rules.
 
-## No alternate responder client
+## No alternate responder controller
 
 The Python Bridge never starts App Server, calls a business responder RPC, reads
 Codex databases or rollout files, or owns a responder turn. Its sole launch
@@ -288,6 +298,19 @@ registered Beeper with an opaque page, followed only when still unclaimed by
 the one exact Beeper-only deep-link assist defined above. CLI resume, named
 pipes, responder deep links, UI automation, and similar responder-client paths remain
 forbidden fallbacks.
+
+A separately owner-requested standalone App Server may evaluate passive reading
+of one exact Desktop task without `thread/resume`, `turn/start`, subscription, or
+mutation. It never joins the resident Bridge, owns the turn, drives the UI, or
+becomes a final transport. The current `thread/read(includeTurns=true)` response
+schema is content-bearing and may return persisted answer, reasoning, tool
+arguments, and tool results when available; it exposes no schema-guaranteed
+metadata-only projection. An isolated implementation may discard those fields
+and retain an answer-free receipt, but that receipt can at most contribute to a
+future `observed_runtime_correlation` finding. It does not establish correlation
+by itself, prove that the observer never received content, or provide product
+caller/turn attestation. Activation remains closed until the gates in
+`app-server-probe.md` are proven.
 
 Missing registration or provenance, conflicting identity, unknown responder
 outcome, or unavailable required capability fails closed without adding an

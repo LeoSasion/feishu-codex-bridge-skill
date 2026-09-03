@@ -980,6 +980,61 @@ function Get-InstalledBridgeHookIssues {
         return $issues
     }
 
+    # The exact-path checks below prove that the two current handlers exist and
+    # are unique. Scan every project Hook event by the lifecycle script leaf
+    # names as well so a retired-path or wrong-event Bridge handler cannot hide
+    # outside those two exact-path counts and make machine verification pass.
+    $startScriptName = [System.IO.Path]::GetFileName($StartScriptPath)
+    $stopScriptName = [System.IO.Path]::GetFileName($StopScriptPath)
+    $unexpectedBridgeHandlerCount = 0
+    foreach ($eventProperty in @($hooksProperty.Value.PSObject.Properties)) {
+        $eventName = [string]$eventProperty.Name
+        foreach ($group in @($eventProperty.Value)) {
+            $groupHooksProperty = $group.PSObject.Properties['hooks']
+            if (-not $groupHooksProperty) { continue }
+            $groupHooksAreArray = $groupHooksProperty.Value -is [System.Array]
+            foreach ($handler in @($groupHooksProperty.Value)) {
+                $commandProperty = $handler.PSObject.Properties['command']
+                $windowsCommandProperty = $handler.PSObject.Properties['commandWindows']
+                $command = if ($commandProperty) { [string]$commandProperty.Value } else { '' }
+                $windowsCommand = if ($windowsCommandProperty) { [string]$windowsCommandProperty.Value } else { '' }
+                $referencesStart = (
+                    $command.IndexOf($startScriptName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                    $windowsCommand.IndexOf($startScriptName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+                )
+                $referencesStop = (
+                    $command.IndexOf($stopScriptName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                    $windowsCommand.IndexOf($stopScriptName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+                )
+                if (-not $referencesStart -and -not $referencesStop) { continue }
+
+                $expectedScript = if ($eventName -ceq 'SessionStart' -and $referencesStart -and -not $referencesStop) {
+                    $StartScriptPath
+                } elseif ($eventName -ceq 'SessionEnd' -and $referencesStop -and -not $referencesStart) {
+                    $StopScriptPath
+                } else {
+                    $null
+                }
+                $expectedCommand = if ($expectedScript) {
+                    'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -HookInvocation' -f $expectedScript
+                } else {
+                    ''
+                }
+                if (-not $groupHooksAreArray -or
+                    -not $expectedScript -or
+                    -not $command.Equals($expectedCommand, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    -not $windowsCommand.Equals($expectedCommand, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $unexpectedBridgeHandlerCount += 1
+                }
+            }
+        }
+    }
+    if ($unexpectedBridgeHandlerCount -gt 0) {
+        $issues.Add(
+            "Project hooks include unexpected Bridge lifecycle handlers; found $unexpectedBridgeHandlerCount."
+        )
+    }
+
     $specifications = @(
         [pscustomobject]@{
             Event = 'SessionStart'
@@ -1035,7 +1090,21 @@ function Get-InstalledBridgeHookIssues {
                     -not $windowsCommand.Equals($expectedCommand, [System.StringComparison]::OrdinalIgnoreCase)) {
                     $issues.Add("$($specification.Event) Bridge command is not the exact installed command.")
                 }
-                if (-not $timeoutProperty -or [int]$timeoutProperty.Value -ne $specification.Timeout) {
+                $timeoutIsInteger = if ($timeoutProperty) {
+                    $timeoutProperty.Value -is [System.SByte] -or
+                    $timeoutProperty.Value -is [System.Byte] -or
+                    $timeoutProperty.Value -is [System.Int16] -or
+                    $timeoutProperty.Value -is [System.UInt16] -or
+                    $timeoutProperty.Value -is [System.Int32] -or
+                    $timeoutProperty.Value -is [System.UInt32] -or
+                    $timeoutProperty.Value -is [System.Int64] -or
+                    $timeoutProperty.Value -is [System.UInt64]
+                } else {
+                    $false
+                }
+                if (-not $timeoutProperty -or
+                    -not $timeoutIsInteger -or
+                    [long]$timeoutProperty.Value -ne $specification.Timeout) {
                     $issues.Add("$($specification.Event) Bridge timeout is not $($specification.Timeout) seconds.")
                 }
                 if (-not $statusProperty -or [string]$statusProperty.Value -cne $specification.StatusMessage) {
@@ -1046,11 +1115,39 @@ function Get-InstalledBridgeHookIssues {
                     if (-not $matcherProperty -or [string]$matcherProperty.Value -cne $specification.Matcher) {
                         $issues.Add("$($specification.Event) Bridge matcher is not '$($specification.Matcher)'.")
                     }
+                } else {
+                    $matcherProperty = $group.PSObject.Properties['matcher']
+                    if ($matcherProperty) {
+                        $issues.Add("$($specification.Event) Bridge matcher must be absent.")
+                    }
                 }
             }
         }
         if ($bridgeHandlerCount -ne 1) {
             $issues.Add("$($specification.Event) must contain exactly one Bridge handler; found $bridgeHandlerCount.")
+        }
+    }
+    foreach ($specification in $specifications) {
+        try {
+            $scriptInfo = Get-Item -LiteralPath $specification.Script -Force -ErrorAction Stop
+            if ($scriptInfo.PSIsContainer -or
+                ($scriptInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                $scriptInfo.Length -gt 2097152) {
+                throw 'lifecycle script is not a bounded regular file'
+            }
+            $scriptText = Get-Content -LiteralPath $specification.Script -Raw -Encoding utf8 -ErrorAction Stop
+            $writeOutputCount = [regex]::Matches($scriptText, '(?m)^\s*Write-Output\b').Count
+            $successOutputSilent = (
+                $scriptText -match [regex]::Escape('FEISHU_BRIDGE_HOOK_SUCCESS_STDOUT_SILENT_V1') -and
+                $scriptText -match [regex]::Escape('if (-not $HookInvocation)') -and
+                $scriptText -match [regex]::Escape('Write-Output $Message') -and
+                $writeOutputCount -eq 1
+            )
+            if (-not $successOutputSilent) {
+                $issues.Add("$($specification.Event) HookInvocation success output is not silent.")
+            }
+        } catch {
+            $issues.Add("$($specification.Event) HookInvocation output contract could not be verified.")
         }
     }
     return $issues
@@ -1682,8 +1779,22 @@ function Get-BridgeDoctorContract {
     }
     $manifestIssues = @(Get-InstalledBridgeManifestIssues)
     $historicalRules = Get-BridgeHistoricalBeeperRulesState
-    [string[]]$hookIssueCodes = @()
-    if ($hookIssues.Count -gt 0) { $hookIssueCodes = @('hook_contract_invalid') }
+    $hookOutputIssues = @(
+        $hookIssues | Where-Object {
+            $_ -like '*HookInvocation success output is not silent.*' -or
+            $_ -like '*HookInvocation output contract could not be verified.*'
+        }
+    )
+    $hookConfigurationIssues = @(
+        $hookIssues | Where-Object {
+            $_ -notlike '*HookInvocation success output is not silent.*' -and
+            $_ -notlike '*HookInvocation output contract could not be verified.*'
+        }
+    )
+    [string[]]$hookIssueCodes = @(
+        if ($hookConfigurationIssues.Count -gt 0) { 'hook_contract_invalid' }
+        if ($hookOutputIssues.Count -gt 0) { 'hook_success_output_not_silent' }
+    )
     $parity = Get-BridgeParity
     $envState = Get-BridgeEnvFileState
     $envIssues = @($envState.Issues)
@@ -1755,8 +1866,12 @@ function Get-BridgeDoctorContract {
         }
         hooks = [ordered]@{
             valid = ($hookIssues.Count -eq 0)
+            configuration_machine_verified = ($hookConfigurationIssues.Count -eq 0)
+            installed_bytes_manifest_bound = ($manifestIssues.Count -eq 0)
+            success_output_silent = ($hookOutputIssues.Count -eq 0)
             issue_count = $hookIssues.Count
             issue_codes = $hookIssueCodes
+            loaded_cross_layer_uniqueness = 'unverified_requires_visible_review'
             trust_requires_visible_review = $true
         }
         historical_beeper_rules = [ordered]@{
@@ -2435,6 +2550,11 @@ function Get-BridgeReadinessContract {
                 else { 'review_required' }
             )
             configured = [bool]$installationChecks.hook_configuration_valid
+            configuration_machine_verified = [bool]$doctor.hooks.configuration_machine_verified
+            installed_bytes_manifest_bound = [bool]$doctor.hooks.installed_bytes_manifest_bound
+            success_output_silent = [bool]$doctor.hooks.success_output_silent
+            loaded_cross_layer_uniqueness = 'unverified_requires_visible_review'
+            trust_requires_visible_review = $true
             machine_verifiable = $newSurfaceTrusted
             visible_review_observed = $hookReviewPassed
             production_gate_passed = $hookReviewPassed
@@ -2785,10 +2905,20 @@ function Invoke-BridgeValidate {
     $startHookText = Get-Content -LiteralPath (Join-Path $skillRoot 'scripts\start-feishu-codex-bridge.ps1') -Raw -Encoding utf8
     $stopHookText = Get-Content -LiteralPath (Join-Path $skillRoot 'scripts\stop-feishu-codex-bridge.ps1') -Raw -Encoding utf8
     foreach ($hookText in @($startHookText, $stopHookText)) {
-        foreach ($marker in @('[switch]$HookInvocation', 'Get-InputPayload -Required:$HookInvocation')) {
+        foreach ($marker in @(
+            '[switch]$HookInvocation',
+            'Get-InputPayload -Required:$HookInvocation',
+            'FEISHU_BRIDGE_HOOK_SUCCESS_STDOUT_SILENT_V1',
+            'function Write-LifecycleStatus',
+            'if (-not $HookInvocation)',
+            'Write-Output $Message'
+        )) {
             if ($hookText -notmatch [regex]::Escape($marker)) {
                 throw "Lifecycle hook is missing fail-closed invocation marker: $marker"
             }
+        }
+        if ([regex]::Matches($hookText, '(?m)^\s*Write-Output\b').Count -ne 1) {
+            throw 'Lifecycle HookInvocation success output must pass only through the silent status helper.'
         }
         if ($hookText -match [regex]::Escape('[Console]::IsInputRedirected')) {
             throw 'Lifecycle hooks must not use IsInputRedirected to distinguish Codex hooks from manual commands.'
@@ -2858,7 +2988,7 @@ function Invoke-BridgeValidate {
         'Update-InstalledStoppedHealthSnapshot',
         'runtime-manifest.json',
         'CODEX_BRIDGE_ACCESS_MODE=locked',
-        '$expectedVersion = ''4.2.0-alpha.64''',
+        '$expectedVersion = ''4.2.0-alpha.66''',
         '$BRIDGE_RUNTIME_MANIFEST_SCHEMA = 1'
     )) {
         if ($installerText -notmatch [regex]::Escape($marker)) {
@@ -3178,6 +3308,26 @@ function Invoke-BridgeValidate {
     )) {
         if ($pythonRuntimeText -notmatch [regex]::Escape($marker)) {
             throw "Desktop Beeper transport marker is missing: $marker"
+        }
+    }
+    foreach ($promptBudgetMarker in @(
+        'QUEUE_CONTROL_PROMPT_MAX_CHARS = 512',
+        'QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS = 1700',
+        'ordinary Beeper control prompt exceeds its context budget',
+        'read-only Beeper control prompt exceeds its context budget'
+    )) {
+        if ($clientText -notmatch [regex]::Escape($promptBudgetMarker)) {
+            throw "Desktop Beeper client is missing a context-budget marker: $promptBudgetMarker"
+        }
+    }
+    foreach ($promptBudgetTestMarker in @(
+        'QUEUE_CONTROL_PROMPT + page',
+        'QUEUE_CONTROL_PROMPT_MAX_CHARS',
+        'QUEUE_READONLY_CONTROL_PROMPT + page',
+        'QUEUE_READONLY_CONTROL_PROMPT_MAX_CHARS'
+    )) {
+        if ($beeperClientTestText -notmatch [regex]::Escape($promptBudgetTestMarker)) {
+            throw "Desktop Beeper tests are missing a context-budget assertion: $promptBudgetTestMarker"
         }
     }
     foreach ($producerTombstoneMarker in @(
@@ -3677,8 +3827,8 @@ function Invoke-BridgeValidate {
         }
     }
     $configText = Get-Content -LiteralPath (Join-Path $skillRoot 'scripts\bridge_core\config.py') -Raw -Encoding utf8
-    if ($configText -notmatch [regex]::Escape('BRIDGE_VERSION = "4.2.0-alpha.64"')) {
-        throw 'Bridge version marker is not 4.2.0-alpha.64.'
+    if ($configText -notmatch [regex]::Escape('BRIDGE_VERSION = "4.2.0-alpha.66"')) {
+        throw 'Bridge version marker is not 4.2.0-alpha.66.'
     }
     foreach ($accessDefaultMarker in @(
         '"CODEX_BRIDGE_ACCESS_MODE": ("locked"',
@@ -3763,7 +3913,7 @@ function Invoke-BridgeValidate {
         throw 'SKILL.md frontmatter is missing required name/description fields.'
     }
     foreach ($beeperMarker in @(
-        '4.2.0-alpha.64',
+        '4.2.0-alpha.66',
         '[feishu-codex-bridge-skill.md](../../feishu-codex-bridge-skill.md)',
         '[upgrade-bridge.md](../../upgrade-bridge.md)',
         '本地 `HANDOFF.md`',
@@ -3866,7 +4016,7 @@ function Invoke-BridgeValidate {
         '重新生成当前 CLI 对应的 App Server Schema',
         'capability/shape',
         '旧 Schema 不复用',
-        '不授权启动 App Server',
+        '不授权 App Server 控制',
         'fail closed',
         'fallback'
     )) {
@@ -4229,7 +4379,16 @@ function Invoke-BridgeValidate {
         'ephemeral_thread_path_nullable',
         'mcp_status_shape_available',
         'mcp_tool_response_shape_available',
-        'jsonl_rpc_envelopes_available'
+        'jsonl_rpc_envelopes_available',
+        'thread_read_shape_available',
+        'thread_read_content_bearing',
+        'passive_observer_protocol_available',
+        'metadata_only_projection_available',
+        'observer_response_objects_closed',
+        'observer_requires_allowlist_projection',
+        'observed_runtime_correlation',
+        'product_caller_turn_attested',
+        'passive_observer_activation_allowed'
     )) {
         if ($appServerContractText -notmatch [regex]::Escape($appServerContractMarker)) {
             throw "App Server static contract auditor is missing marker: $appServerContractMarker"
@@ -4339,7 +4498,11 @@ function Invoke-BridgeValidate {
         'runtime_provenance_unavailable',
         'static_inputs_bound=true',
         'runtime_source_bound=false',
-        'desktop_task_coordination_certified` and'
+        'desktop_task_coordination_certified` and',
+        'thread/read(includeTurns=true)',
+        'metadata-only projection',
+        'observed_runtime_correlation',
+        'no Desktop UI/control impact'
     )) {
         if (($appServerBeeperReferenceText + "`n" + $upgradeText) -notmatch [regex]::Escape($appServerReferenceMarker)) {
             throw "App Server beeper guidance is missing marker: $appServerReferenceMarker"
@@ -4519,7 +4682,9 @@ function Invoke-BridgeValidate {
         'Bridge-owned at-most-once attempt',
         'Each installed Bridge namespace has exactly one independent,',
         'Every selected Desktop responder remains sole owner',
-        'alternate responder client or reply fallback',
+        'responder controller, turn owner, or reply fallback',
+        'no-resume, no-mutation observation',
+        'current `thread/read` shape is content-bearing',
         'An outcome with `may_have_started=true` is terminal',
         'Completion accepts only `final_callback_source=final_callback`',
         'The selected Desktop responder must call `submit_final_callback` once',

@@ -34,11 +34,40 @@ class AppServerContractTests(unittest.TestCase):
             for method in APP_SERVER_CONTRACT.REQUIRED_CLIENT_METHODS
             if method != omitted_method
         ]
+        thread_read_params = {
+            "properties": {
+                "includeTurns": {"type": "boolean"},
+                "threadId": {"type": "string"},
+            },
+            "required": ["threadId"],
+            "type": "object",
+        }
+        request_variants = []
+        for method in methods:
+            if method == "thread/read":
+                request_variants.append(
+                    {
+                        "properties": {
+                            "id": {},
+                            "method": {
+                                "enum": ["thread/read"],
+                                "type": "string",
+                            },
+                            "params": {
+                                "$ref": "#/definitions/ThreadReadParams"
+                            },
+                        },
+                        "required": ["id", "method", "params"],
+                        "type": "object",
+                    }
+                )
+            else:
+                request_variants.append(
+                    {"properties": {"method": {"enum": [method]}}}
+                )
         client_request = {
-            "oneOf": [
-                {"properties": {"method": {"enum": [method]}}}
-                for method in methods
-            ]
+            "definitions": {"ThreadReadParams": thread_read_params},
+            "oneOf": request_variants,
         }
         (schema_root / "ClientRequest.json").write_text(
             json.dumps(client_request), encoding="utf-8"
@@ -203,6 +232,141 @@ class AppServerContractTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        (schema_root / "v2" / "ThreadReadParams.json").write_text(
+            json.dumps(
+                {
+                    **thread_read_params,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (schema_root / "v2" / "ThreadReadResponse.json").write_text(
+            json.dumps(
+                {
+                    "definitions": {
+                        "Thread": {
+                            "properties": {
+                                "id": {"type": "string"},
+                                "status": {
+                                    "allOf": [
+                                        {"$ref": "#/definitions/ThreadStatus"}
+                                    ]
+                                },
+                                "turns": {
+                                    "items": {"$ref": "#/definitions/Turn"},
+                                    "type": "array",
+                                },
+                            },
+                            "required": ["id", "status", "turns"],
+                            "type": "object",
+                        },
+                        "Turn": {
+                            "properties": {
+                                "id": {"type": "string"},
+                                "items": {
+                                    "items": {"$ref": "#/definitions/ThreadItem"},
+                                    "type": "array",
+                                },
+                                "status": {"$ref": "#/definitions/TurnStatus"},
+                            },
+                            "required": ["id", "items", "status"],
+                            "type": "object",
+                        },
+                        "ThreadStatus": {
+                            "oneOf": [
+                                {
+                                    "properties": {
+                                        "type": {"enum": [value], "type": "string"}
+                                    },
+                                    "required": ["type"],
+                                    "type": "object",
+                                }
+                                for value in (
+                                    "notLoaded",
+                                    "idle",
+                                    "systemError",
+                                    "active",
+                                )
+                            ]
+                        },
+                        "TurnStatus": {
+                            "enum": [
+                                "completed",
+                                "interrupted",
+                                "failed",
+                                "inProgress",
+                            ],
+                            "type": "string",
+                        },
+                        "McpToolCallStatus": {
+                            "enum": ["inProgress", "completed", "failed"],
+                            "type": "string",
+                        },
+                        "ThreadItem": {
+                            "oneOf": [
+                                {
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "type": {
+                                            "enum": ["agentMessage"],
+                                            "type": "string",
+                                        },
+                                    },
+                                    "required": ["id", "text", "type"],
+                                    "title": "AgentMessageThreadItem",
+                                    "type": "object",
+                                },
+                                {
+                                    "properties": {
+                                        "content": {"type": "array"},
+                                        "id": {"type": "string"},
+                                        "summary": {"type": "array"},
+                                        "type": {
+                                            "enum": ["reasoning"],
+                                            "type": "string",
+                                        },
+                                    },
+                                    "required": ["id", "type"],
+                                    "title": "ReasoningThreadItem",
+                                    "type": "object",
+                                },
+                                {
+                                    "properties": {
+                                        "arguments": True,
+                                        "id": {"type": "string"},
+                                        "result": {},
+                                        "server": {"type": "string"},
+                                        "status": {
+                                            "$ref": "#/definitions/McpToolCallStatus"
+                                        },
+                                        "tool": {"type": "string"},
+                                        "type": {
+                                            "enum": ["mcpToolCall"],
+                                            "type": "string",
+                                        },
+                                    },
+                                    "required": [
+                                        "arguments",
+                                        "id",
+                                        "server",
+                                        "status",
+                                        "tool",
+                                        "type",
+                                    ],
+                                    "title": "McpToolCallThreadItem",
+                                    "type": "object",
+                                },
+                            ]
+                        },
+                    },
+                    "properties": {"thread": {"$ref": "#/definitions/Thread"}},
+                    "required": ["thread"],
+                    "type": "object",
+                }
+            ),
+            encoding="utf-8",
+        )
 
         manifest_path = root / "desktop-mcp.json"
         manifest_path.write_text(
@@ -265,6 +429,19 @@ class AppServerContractTests(unittest.TestCase):
         self.assertFalse(result["plain_compact_is_native_compaction"])
         self.assertFalse(result["model_turn_required_for_tool_call"])
         self.assertTrue(result["read_only_mvp_protocol_available"])
+        self.assertTrue(result["thread_read_shape_available"])
+        self.assertTrue(result["thread_read_content_bearing"])
+        self.assertTrue(result["passive_observer_protocol_available"])
+        self.assertFalse(result["metadata_only_projection_available"])
+        self.assertFalse(result["observer_response_objects_closed"])
+        self.assertTrue(result["observer_requires_allowlist_projection"])
+        self.assertFalse(result["observed_runtime_correlation"])
+        self.assertFalse(result["product_caller_turn_attested"])
+        self.assertFalse(result["passive_observer_activation_allowed"])
+        self.assertIn(
+            "metadata_only_observer_projection_missing",
+            result["passive_observer_activation_blockers"],
+        )
         self.assertTrue(result["ephemeral_thread_start_shape_available"])
         self.assertTrue(result["ephemeral_thread_path_nullable"])
         self.assertTrue(result["mcp_status_shape_available"])
@@ -349,6 +526,163 @@ class AppServerContractTests(unittest.TestCase):
             self.assertIn(
                 "ephemeral_thread_start_contract_changed", result["issues"]
             )
+
+        with self.subTest(case="thread_read_observer_shape"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                params_path = schema_root / "v2" / "ThreadReadParams.json"
+                params = json.loads(params_path.read_text(encoding="utf-8"))
+                params["required"] = []
+                params_path.write_text(json.dumps(params), encoding="utf-8")
+                result = APP_SERVER_CONTRACT.audit_contract(
+                    schema_root=schema_root,
+                    desktop_mcp_manifest=manifest,
+                    desktop_mcp_server=server,
+                )
+            self.assertEqual(result["status"], "fail")
+            self.assertFalse(result["thread_read_shape_available"])
+            self.assertFalse(result["passive_observer_protocol_available"])
+            self.assertIn(
+                "thread_read_observer_contract_changed", result["issues"]
+            )
+
+        with self.subTest(case="thread_read_declared_fields_drift"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                params_path = schema_root / "v2" / "ThreadReadParams.json"
+                params = json.loads(params_path.read_text(encoding="utf-8"))
+                params["properties"]["unexpected"] = {"type": "string"}
+                params_path.write_text(json.dumps(params), encoding="utf-8")
+                result = APP_SERVER_CONTRACT.audit_contract(
+                    schema_root=schema_root,
+                    desktop_mcp_manifest=manifest,
+                    desktop_mcp_server=server,
+                )
+            self.assertFalse(result["thread_read_shape_available"])
+            self.assertIn(
+                "thread_read_observer_contract_changed", result["issues"]
+            )
+
+        with self.subTest(case="thread_read_request_route_unreachable"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                request_path = schema_root / "ClientRequest.json"
+                request = json.loads(request_path.read_text(encoding="utf-8"))
+                variant = next(
+                    item
+                    for item in request["oneOf"]
+                    if item.get("properties", {})
+                    .get("method", {})
+                    .get("enum")
+                    == ["thread/read"]
+                )
+                variant["properties"]["params"] = {
+                    "$ref": "#/definitions/OtherParams"
+                }
+                request["definitions"]["OtherParams"] = request["definitions"][
+                    "ThreadReadParams"
+                ]
+                request_path.write_text(json.dumps(request), encoding="utf-8")
+                result = APP_SERVER_CONTRACT.audit_contract(
+                    schema_root=schema_root,
+                    desktop_mcp_manifest=manifest,
+                    desktop_mcp_server=server,
+                )
+            self.assertFalse(result["thread_read_shape_available"])
+            self.assertFalse(result["passive_observer_protocol_available"])
+
+        with self.subTest(case="thread_read_turn_chain_unreachable"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                response_path = schema_root / "v2" / "ThreadReadResponse.json"
+                response = json.loads(response_path.read_text(encoding="utf-8"))
+                response["definitions"]["Thread"]["properties"]["turns"][
+                    "items"
+                ] = {"type": "object"}
+                response["detachedDecoy"] = {
+                    "title": "McpToolCallThreadItem",
+                    "required": sorted(
+                        APP_SERVER_CONTRACT.MCP_OBSERVER_ITEM_REQUIRED_FIELDS
+                    ),
+                }
+                response_path.write_text(json.dumps(response), encoding="utf-8")
+                result = APP_SERVER_CONTRACT.audit_contract(
+                    schema_root=schema_root,
+                    desktop_mcp_manifest=manifest,
+                    desktop_mcp_server=server,
+                )
+            self.assertFalse(result["thread_read_shape_available"])
+            self.assertFalse(result["passive_observer_protocol_available"])
+
+        for case, mutate in (
+            (
+                "thread_read_items_not_array",
+                lambda response: response["definitions"]["Turn"]["properties"][
+                    "items"
+                ].update({"type": "object"}),
+            ),
+            (
+                "thread_read_mcp_type_drift",
+                lambda response: response["definitions"]["ThreadItem"]["oneOf"][
+                    2
+                ]["properties"]["type"].update({"enum": ["other"]}),
+            ),
+            (
+                "thread_read_mcp_server_nullable",
+                lambda response: response["definitions"]["ThreadItem"]["oneOf"][
+                    2
+                ]["properties"]["server"].update(
+                    {"type": ["string", "null"]}
+                ),
+            ),
+            (
+                "thread_read_mcp_status_enum_drift",
+                lambda response: response["definitions"][
+                    "McpToolCallStatus"
+                ].update({"enum": ["completed"]}),
+            ),
+        ):
+            with self.subTest(case=case):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                    response_path = schema_root / "v2" / "ThreadReadResponse.json"
+                    response = json.loads(
+                        response_path.read_text(encoding="utf-8")
+                    )
+                    mutate(response)
+                    response_path.write_text(json.dumps(response), encoding="utf-8")
+                    result = APP_SERVER_CONTRACT.audit_contract(
+                        schema_root=schema_root,
+                        desktop_mcp_manifest=manifest,
+                        desktop_mcp_server=server,
+                    )
+                self.assertFalse(result["thread_read_shape_available"])
+                self.assertIn(
+                    "thread_read_observer_contract_changed", result["issues"]
+                )
+
+        with self.subTest(case="thread_read_content_classification_is_conservative"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                schema_root, manifest, server = self._write_fixture(Path(temp_dir))
+                response_path = schema_root / "v2" / "ThreadReadResponse.json"
+                response = json.loads(response_path.read_text(encoding="utf-8"))
+                variants = response["definitions"]["ThreadItem"]["oneOf"]
+                variants[:] = [
+                    item
+                    for item in variants
+                    if item["title"] not in {
+                        "AgentMessageThreadItem",
+                        "ReasoningThreadItem",
+                    }
+                ]
+                response_path.write_text(json.dumps(response), encoding="utf-8")
+                result = APP_SERVER_CONTRACT.audit_contract(
+                    schema_root=schema_root,
+                    desktop_mcp_manifest=manifest,
+                    desktop_mcp_server=server,
+                )
+            self.assertTrue(result["thread_read_shape_available"])
+            self.assertTrue(result["thread_read_content_bearing"])
 
     def test_static_json_rejects_duplicate_members_and_non_finite_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

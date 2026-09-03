@@ -1053,7 +1053,7 @@ Assert-NoReparsePathChain -Path $inventoryPath -Role 'release inventory after re
 $inventoryText = $script:StrictUtf8.GetString($inventoryBytes)
 $inventory = ConvertFrom-UniqueJsonBytes -Bytes $inventoryBytes -Role 'Release inventory'
 if ([int]$inventory.schema_version -ne 1) { throw 'Unsupported release inventory schema.' }
-if ([string]$inventory.source_version -ne '4.2.0-alpha.64') { throw 'Release inventory source version is not current.' }
+if ([string]$inventory.source_version -ne '4.2.0-alpha.66') { throw 'Release inventory source version is not current.' }
 Assert-ReleaseInventoryContract -Inventory $inventory
 $script:ReleaseAuditMaxBytes = [long]$inventory.max_text_file_bytes
 Assert-ReleaseSourceRoute -Desktop $desktop -Inventory $inventory -Role $SourceRole
