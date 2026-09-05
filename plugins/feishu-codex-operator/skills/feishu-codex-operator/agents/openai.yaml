@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feishu Codex Operator"
+  short_description: "Configure and develop the Feishu-to-Codex Operator"
+  default_prompt: "Use $feishu-codex-operator to inspect this project and complete the requested Operator setup, diagnosis, or development."

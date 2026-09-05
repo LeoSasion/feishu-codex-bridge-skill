@@ -1,0 +1,25 @@
+{
+  "name": "feishu-codex-operator",
+  "version": "1.0.0",
+  "description": "Map Feishu conversations to Codex Desktop tasks with minimal Beeper relay and Final Callback delivery.",
+  "author": {
+    "name": "Feishu Codex Operator Project"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "飞书 Codex Operator（接线员）",
+    "shortDescription": "自适应 Beeper 唤醒信号，Final Callback 回传",
+    "longDescription": "飞书 Codex 接线员：持久会话映射、最小 Beeper 中继、自适应唤醒与额度检查、只读任务目录和生命周期观察。Responder 独占业务执行，Final Callback 回传最终答案。",
+    "developerName": "Feishu Codex Operator Project",
+    "category": "Productivity",
+    "capabilities": [
+      "Feishu authentication, attachments and durable delivery",
+      "Exact scope-to-task mapping and read-only /init",
+      "Minimal Beeper relay with adaptive wake lease",
+      "Quota cache and content-free lifecycle observation",
+      "Responder-owned Final Callback"
+    ],
+    "defaultPrompt": "使用 $feishu-codex-operator 完成本项目的配置、诊断或开发；先核实源码与运行状态，再按请求范围操作。"
+  },
+  "mcpServers": "./.mcp.json"
+}

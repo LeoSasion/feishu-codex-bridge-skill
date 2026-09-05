@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "release_name": "feishu-codex-operator-plugin",
+  "source_version": "4.2.0-alpha.86",
+  "repository_files": [
+    ".agents/plugins/marketplace.json",
+    ".gitignore",
+    "README.md"
+  ],
+  "max_text_file_bytes": 2097152,
+  "components": [
+    {
+      "name": "desktop_operator",
+      "root_role": "plugin_root",
+      "paths": [
+        ".codex-plugin/plugin.json",
+        ".gitignore",
+        ".mcp.json",
+        "README.md",
+        "assets/AGENTS.feishu-codex-operator.md",
+        "assets/release-inventory.json",
+        "feishu-codex-operator-skill.md",
+        "references/architecture.md",
+        "references/beeper-e2e-lessons.md",
+        "references/feishu-command-ux.md",
+        "references/feishu-desktop-client.md",
+        "references/feishu-auth.md",
+        "references/permissions-and-hooks.md",
+        "references/release-audit.md",
+        "references/terminology.md",
+        "scripts/audit-feishu-codex-release.ps1",
+        "scripts/operator_main.py",
+        "scripts/operator_core/__init__.py",
+        "scripts/operator_core/app_server_catalog.py",
+        "scripts/operator_core/app_server.py",
+        "scripts/operator_core/config.py",
+        "scripts/operator_core/dispatch.py",
+        "scripts/operator_core/telemetry.py",
+        "scripts/operator_core/final_callback.py",
+        "scripts/operator_core/lark.py",
+        "scripts/operator_core/rate_limits.py",
+        "scripts/operator_core/responder_observer.py",
+        "scripts/operator_core/beeper_relay.py",
+        "scripts/operator_core/runtime.py",
+        "scripts/operator_core/state.py",
+        "scripts/feishu-codex-operator.ps1",
+        "scripts/final_callback_mcp_server.py",
+        "scripts/relay_mcp_server.py",
+        "scripts/install-feishu-codex-operator.ps1",
+        "scripts/merge-agents-rules.ps1",
+        "scripts/routing_cli.py",
+        "scripts/source_route_contract.py",
+        "scripts/start-feishu-codex-operator.ps1",
+        "scripts/stop-feishu-codex-operator.ps1",
+        "scripts/temporary_binding_transaction.py",
+        "skills/feishu-codex-operator/SKILL.md",
+        "skills/feishu-codex-operator/agents/openai.yaml",
+        "tests/test_agents_rules.py",
+        "tests/test_app_server_catalog.py",
+        "tests/test_app_server.py",
+        "tests/test_config.py",
+        "tests/test_performance.py",
+        "tests/test_install_upgrade.py",
+        "tests/test_final_callback.py",
+        "tests/test_rate_limits.py",
+        "tests/test_responder_observer.py",
+        "tests/test_beeper_relay.py",
+        "tests/test_routing.py",
+        "tests/test_source_route_contract.py",
+        "tests/test_state.py",
+        "upgrade-operator.md"
+      ],
+      "allowed_empty_directories": ["tests/fixtures"]
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "vcs_and_local_state",
+      "directory_paths": [".git", ".codex", ".agents/skills", ".tmp", "tests/.tmp"],
+      "directory_names": ["__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "node_modules"],
+      "exact_paths": ["AGENTS.md", "EXPERIMENT-LOG.md", "skills-lock.json"],
+      "file_suffixes": [".pyc", ".pyo"],
+      "must_be_absent": false
+    }
+  ],
+  "forbidden_artifacts": {
+    "directory_names": ["attachments", "runtime", "staging", "venv"],
+    "file_names": [
+      "operator.env",
+      "operator.lock",
+      "operator.pid",
+      "runtime-manifest.json",
+      "sessions.json",
+      "state.sqlite3",
+      "callbacks.sqlite3"
+    ],
+    "file_suffixes": [
+      "-shm",
+      "-wal",
+      ".bak",
+      ".db",
+      ".dll",
+      ".exe",
+      ".jsonl",
+      ".log",
+      ".pid",
+      ".sqlite",
+      ".sqlite3",
+      ".tmp",
+      ".zip"
+    ]
+  }
+}

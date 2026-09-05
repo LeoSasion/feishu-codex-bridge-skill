@@ -1,14 +1,14 @@
 {
-  "name": "feishu-codex-bridge",
+  "name": "feishu-codex-operator",
   "interface": {
-    "displayName": "Feishu Codex Bridge"
+    "displayName": "Feishu Codex Operator"
   },
   "plugins": [
     {
-      "name": "feishu-codex-bridge",
+      "name": "feishu-codex-operator",
       "source": {
         "source": "local",
-        "path": "./plugins/feishu-codex-bridge"
+        "path": "./plugins/feishu-codex-operator"
       },
       "policy": {
         "installation": "AVAILABLE",

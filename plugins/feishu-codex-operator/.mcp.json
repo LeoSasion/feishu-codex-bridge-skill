@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "feishu_operator_relay": {
+      "command": "python",
+      "args": ["-I", "-S", "-B", "-u", "./scripts/relay_mcp_server.py"],
+      "cwd": ".",
+      "env_vars": ["LOCALAPPDATA", "PATH", "USERPROFILE"],
+      "startup_timeout_sec": 10,
+      "tool_timeout_sec": 2,
+      "default_tools_approval_mode": "auto"
+    },
+    "feishu_final_callback": {
+      "title": "飞书 Codex Final Callback",
+      "description": "Route one Responder-owned final reply to a pending Feishu request by public request_id. This is correlation, not authentication or caller/turn attestation.",
+      "command": "python",
+      "args": [
+        "-I",
+        "-S",
+        "-B",
+        "-u",
+        "./scripts/final_callback_mcp_server.py"
+      ],
+      "cwd": ".",
+      "env_vars": [
+        "LOCALAPPDATA",
+        "PATH",
+        "USERPROFILE"
+      ],
+      "startup_timeout_sec": 10,
+      "tool_timeout_sec": 45,
+      "default_tools_approval_mode": "auto"
+    }
+  }
+}

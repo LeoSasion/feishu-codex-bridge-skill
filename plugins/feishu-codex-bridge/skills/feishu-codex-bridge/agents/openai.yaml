@@ -1,4 +1,0 @@
-interface:
-  display_name: "Feishu Codex Bridge"
-  short_description: "Latest-first single-Beeper bridge development"
-  default_prompt: "Use $feishu-codex-bridge with one Beeper and Desktop-owned Responders. Keep /init limited to an initiator-bound non-archived catalog, exact read-only inspection, and atomic local binding; preserve no-replay and Final Callback invariants, treat the bearer capability as bounded rather than product caller/turn attestation, choose validation by change impact, and do not revive or emulate historical producers."
