@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from operator_core.beeper_relay import (  # noqa: E402
+    BEEPER_DEFAULT_MODEL,
     BEEPER_DEFAULT_PROMPT_LANGUAGE,
     BEEPER_FALLBACK_PROMPT_LANGUAGE,
     BEEPER_FALLBACK_REASONING_EFFORT,
@@ -32,6 +33,7 @@ from operator_core.beeper_relay import (  # noqa: E402
     classify_queue_rejection,
     send_beeper_wake_up_signal,
 )
+from operator_core.beeper_provider import BEEPER_LOCAL_MODEL  # noqa: E402
 from operator_core.lark import MessageResource, build_turn_material  # noqa: E402
 
 
@@ -46,8 +48,10 @@ def config_for(
     callback_grace: float = 0.05,
     reasoning_override: str = "",
     prompt_language_override: str = "",
+    model_override: str = BEEPER_DEFAULT_MODEL,
 ) -> SimpleNamespace:
     return SimpleNamespace(
+        runtime_dir=root,
         callback_db=root / "callbacks.sqlite3",
         callback_retention_hours=24,
         codex_executable="",
@@ -56,6 +60,7 @@ def config_for(
         callback_grace_seconds=callback_grace,
         beeper_reasoning_effort_override=reasoning_override,
         beeper_prompt_language_override=prompt_language_override,
+        beeper_model_override=model_override,
     )
 
 
@@ -72,6 +77,23 @@ class FakeLifecycleObserver:
         return SimpleNamespace(state=state)
 
     def close(self, _watch: object) -> None:
+        self.closed += 1
+
+
+class FakeLocalProvider:
+    def __init__(self) -> None:
+        self.started = 0
+        self.closed = 0
+
+    def start(self) -> str:
+        if self.started == 0:
+            self.started = 1
+        return "http://127.0.0.1:41234/v1"
+
+    def is_running(self) -> bool:
+        return self.started > 0 and self.closed == 0
+
+    def close(self) -> None:
         self.closed += 1
 
 
@@ -144,7 +166,10 @@ class BeeperRelayClientTests(unittest.TestCase):
                     codex_executable=executable,
                 )
                 try:
-                    client.send({"thread_id": RESPONDER_ID}, "原句", event_id="english-only")
+                    client.send(
+                        {"thread_id": RESPONDER_ID}, "原句",
+                        event_id="english-only", beeper_model=BEEPER_PRIMARY_MODEL,
+                    )
                     self.assertEqual(1, len(queues))
                     prompt = option_value(queues[0], "--message")
                     self.assertTrue(prompt.startswith("You are the minimal"))
@@ -220,6 +245,7 @@ class BeeperRelayClientTests(unittest.TestCase):
                 {"thread_id": RESPONDER_ID},
                 "request",
                 event_id="event-high",
+                beeper_model=BEEPER_PRIMARY_MODEL,
             )
 
             self.assertEqual(
@@ -264,9 +290,9 @@ class BeeperRelayClientTests(unittest.TestCase):
 
             argv = observed["argv"]
             self.assertEqual([str(executable), "queue", "--thread", BEEPER_ID], argv[:4])
-            self.assertEqual(BEEPER_PRIMARY_MODEL, option_value(argv, "--model"))
+            self.assertEqual(BEEPER_DEFAULT_MODEL, option_value(argv, "--model"))
             self.assertEqual(
-                f'model_reasoning_effort="{BEEPER_PRIMARY_REASONING_EFFORT}"',
+                f'model_reasoning_effort="{BEEPER_FALLBACK_REASONING_EFFORT}"',
                 option_value(argv, "--config"),
             )
             self.assertEqual(10, len(argv))
@@ -291,7 +317,7 @@ class BeeperRelayClientTests(unittest.TestCase):
             self.assertIn("Your first action must be exactly one call", prompt)
             self.assertIn("No text before the call.", prompt)
             self.assertEqual("最终回复", answer.final_answer)
-            self.assertEqual(BEEPER_PRIMARY_MODEL, answer.beeper_model)
+            self.assertEqual(BEEPER_DEFAULT_MODEL, answer.beeper_model)
             self.assertFalse(answer.beeper_fallback_used)
             self.assertFalse(answer.beeper_wake_lease_active)
             self.assertTrue(answer.beeper_wake_signal_attempted)
@@ -301,6 +327,64 @@ class BeeperRelayClientTests(unittest.TestCase):
             self.assertIs(subprocess.DEVNULL, observed["kwargs"]["stdin"])
             self.assertIs(subprocess.PIPE, observed["kwargs"]["stdout"])
             self.assertIs(subprocess.PIPE, observed["kwargs"]["stderr"])
+
+    def test_local_beeper_uses_private_catalog_and_loopback_provider_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "codex.exe"
+            executable.write_bytes(b"test")
+            catalog_dir = root / "operator_core"
+            catalog_dir.mkdir()
+            (catalog_dir / "beeper_model_catalog.json").write_bytes(
+                (ROOT / "scripts" / "operator_core" / "beeper_model_catalog.json").read_bytes()
+            )
+            queues: list[list[str]] = []
+            provider = FakeLocalProvider()
+            client = None
+
+            def runner(argv, **_kwargs):
+                queues.append(argv)
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            def send_wake_signal(_thread_id: str) -> None:
+                client.callbacks.submit(
+                    BeeperRelayClient.request_id("event-local-beeper"), "local ok"
+                )
+
+            client = BeeperRelayClient(
+                config_for(root, model_override=BEEPER_LOCAL_MODEL),
+                runner=runner,
+                wake_signal_sender=send_wake_signal,
+                codex_executable=executable,
+                local_provider=provider,
+            )
+            try:
+                client.start()
+                answer = client.send(
+                    {"thread_id": RESPONDER_ID},
+                    "request",
+                    event_id="event-local-beeper",
+                    beeper_model=BEEPER_LOCAL_MODEL,
+                )
+                self.assertEqual("local ok", answer.final_answer)
+                self.assertEqual(BEEPER_LOCAL_MODEL, answer.beeper_model)
+                self.assertEqual(1, len(queues))
+                argv = queues[0]
+                self.assertEqual(BEEPER_LOCAL_MODEL, option_value(argv, "--model"))
+                self.assertIn('model_reasoning_effort="low"', argv)
+                self.assertIn('model_provider="beeper"', argv)
+                self.assertIn('model_providers.beeper.name="Beeper"', argv)
+                self.assertIn(
+                    'model_providers.beeper.base_url="http://127.0.0.1:41234/v1"',
+                    argv,
+                )
+                self.assertIn("model_providers.beeper.request_max_retries=0", argv)
+                self.assertIn("model_providers.beeper.stream_max_retries=0", argv)
+                self.assertTrue(any(value.startswith("model_catalog_json=") for value in argv))
+                self.assertEqual("beeper-relay", client.connection_status())
+            finally:
+                client.close()
+            self.assertEqual(1, provider.closed)
 
     def test_images_audio_and_files_are_forwarded_as_read_only_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -345,6 +429,55 @@ class BeeperRelayClientTests(unittest.TestCase):
             self.assertIn(json.dumps(str(audio.resolve())), nested)
             self.assertIn(json.dumps("C:\\safe\\a.txt"), nested)
             self.assertEqual(1, nested.count("附件请求"))
+
+    def test_local_beeper_rejection_is_terminal_without_model_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "codex.exe"
+            executable.write_bytes(b"test")
+            catalog_dir = root / "operator_core"
+            catalog_dir.mkdir()
+            (catalog_dir / "beeper_model_catalog.json").write_bytes(
+                (ROOT / "scripts" / "operator_core" / "beeper_model_catalog.json").read_bytes()
+            )
+            queues: list[list[str]] = []
+            fallback_checks = 0
+
+            def runner(argv, **_kwargs):
+                queues.append(argv)
+                return SimpleNamespace(
+                    returncode=2,
+                    stdout="",
+                    stderr='{"codexErrorInfo":"usageLimitExceeded"}',
+                )
+
+            def allow_fallback() -> bool:
+                nonlocal fallback_checks
+                fallback_checks += 1
+                return True
+
+            client = BeeperRelayClient(
+                config_for(root, model_override=BEEPER_LOCAL_MODEL),
+                runner=runner,
+                wake_signal_sender=lambda _thread_id: None,
+                codex_executable=executable,
+                local_provider=FakeLocalProvider(),
+            )
+            try:
+                with self.assertRaises(RelayUnavailable) as raised:
+                    client.send(
+                        {"thread_id": RESPONDER_ID},
+                        "request",
+                        event_id="event-local-rejected",
+                        beeper_model=BEEPER_LOCAL_MODEL,
+                        allow_rate_limit_fallback=allow_fallback,
+                    )
+            finally:
+                client.close()
+
+            self.assertEqual("codex_usage_limit", raised.exception.code)
+            self.assertEqual(1, len(queues))
+            self.assertEqual(0, fallback_checks)
 
     def test_nonzero_queue_exit_closes_route_without_wake_signal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -413,6 +546,7 @@ class BeeperRelayClientTests(unittest.TestCase):
                 {"thread_id": RESPONDER_ID},
                 "request",
                 event_id="event-fallback",
+                beeper_model=BEEPER_PRIMARY_MODEL,
                 allow_rate_limit_fallback=allow_fallback,
             )
 
@@ -532,6 +666,7 @@ class BeeperRelayClientTests(unittest.TestCase):
                     {"thread_id": RESPONDER_ID},
                     "request",
                     event_id="event-account-limit",
+                    beeper_model=BEEPER_PRIMARY_MODEL,
                     allow_rate_limit_fallback=lambda: False,
                 )
 

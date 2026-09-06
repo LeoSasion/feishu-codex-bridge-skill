@@ -279,7 +279,7 @@ function Get-OperatorEnvSemanticIssues {
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_ACCESS_MODE'; Values = @('locked', 'compat') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_LIFECYCLE_MODE'; Values = @('hooks', 'manual') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_REPLY_FORMAT'; Values = @('text', 'markdown') },
-        [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_MODEL'; Values = @('', 'gpt-5.3-codex-spark', 'gpt-5.6-luna') },
+        [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_MODEL'; Values = @('', 'beeper', 'gpt-5.3-codex-spark', 'gpt-5.6-luna') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_REASONING_EFFORT'; Values = @('', 'low', 'high') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_PROMPT_LANGUAGE'; Values = @('', 'en', 'zh-cn') }
     )
@@ -808,6 +808,34 @@ function Get-OperatorParity {
             (Join-Path $skillRoot 'scripts\operator_core\responder_observer.py'),
             (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responder_observer.py')
         )
+        'operator_core\beeper_provider.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\beeper_provider.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\beeper_provider.py')
+        )
+        'model-router-requirements.txt' = @(
+            (Join-Path $skillRoot 'scripts\model-router-requirements.txt'),
+            (Join-Path (Get-OperatorPaths).Runtime 'model-router-requirements.txt')
+        )
+        'operator_model_router.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_model_router.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_model_router.py')
+        )
+        'operator_core\model_router_config.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\model_router_config.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_router_config.py')
+        )
+        'operator_core\model_router.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\model_router.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_router.py')
+        )
+        'operator_core\model_registry.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\model_registry.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_registry.py')
+        )
+        'operator_core\beeper_model_catalog.json' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\beeper_model_catalog.json'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\beeper_model_catalog.json')
+        )
         'operator_core\beeper_relay.py' = @(
             (Join-Path $skillRoot 'scripts\operator_core\beeper_relay.py'),
             (Join-Path (Get-OperatorPaths).Runtime 'operator_core\beeper_relay.py')
@@ -866,6 +894,13 @@ function Get-InstalledOperatorManifestIssues {
         'operator_core/lark.py',
         'operator_core/rate_limits.py',
         'operator_core/responder_observer.py',
+        'operator_core/beeper_provider.py',
+        'operator_core/beeper_model_catalog.json',
+        'operator_core/model_registry.py',
+        'operator_core/model_router.py',
+        'operator_core/model_router_config.py',
+        'operator_model_router.py',
+        'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
         'operator_core/state.py'
@@ -1351,6 +1386,8 @@ function Get-OperatorStatusContract {
                     ([string]$beeperModel -ceq 'gpt-5.3-codex-spark' -and
                         [string]$beeperReasoningEffort -in @('low', 'medium', 'high')) -or
                     ([string]$beeperModel -ceq 'gpt-5.6-luna' -and
+                        [string]$beeperReasoningEffort -ceq 'low') -or
+                    ([string]$beeperModel -ceq 'beeper' -and
                         [string]$beeperReasoningEffort -ceq 'low')
                 )
                 if (
@@ -1554,6 +1591,10 @@ function Get-OperatorValidateContract {
         minimal_beeper_source = (
             (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\beeper_relay.py')) -and
             -not (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\beeper_queue.py'))
+        )
+        local_beeper_provider_source = (
+            (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\beeper_provider.py')) -and
+            (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\beeper_model_catalog.json'))
         )
         callback_source = (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\final_callback.py'))
         readonly_catalog_source = (Test-Path -LiteralPath (Join-Path $pluginRoot 'scripts\operator_core\app_server_catalog.py'))

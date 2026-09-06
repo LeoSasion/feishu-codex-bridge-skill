@@ -75,6 +75,23 @@ instructions, nested callback guidance, attachment labels, and attachment-only
 placeholders. The extracted Feishu user text is preserved without translation.
 Attachment metadata uses ASCII JSON with lossless Unicode escapes, not renamed
 files. Beeper receives only a short code-mode instruction and public request_id.
+When `CODEX_OPERATOR_BEEPER_MODEL=beeper`, Operator starts a loopback-only
+Responses API and supplies a private `visibility: list` catalog plus provider
+configuration only on the Beeper queue command. The provider accepts only model
+`beeper`, an exact current relay envelope with one 32-hex request_id, and exactly
+one model-facing `exec` custom tool. Earlier user messages never supply the
+current protocol; unmatched input returns the fixed approved identity declaration
+as an assistant text response, including in SSE. It deterministically emits the same four-line bootstrap without
+weights or sampling. Request and stream retries are both disabled. The listener
+is not an answer transport and closes with Operator.
+Catalog visibility does not register the provider with a running Desktop or
+change a task's persistent provider. That integration is not yet verified;
+do not replace native provider/catalog entries or activate based on offline tests.
+The separate optional [Python Responses router](model-router.md) augments native
+catalog entries and preserves native requests to their original backend, with
+explicit external Responses registrations. It has no LiteLLM dependency or
+Chat Completions conversion. Its reversible global entry-point helper is opt-in;
+persistent lifecycle and live Desktop/native-tool acceptance remain pending.
 The separate `feishu_operator_relay` MCP validates the prepared Desktop arguments
 and returns a fixed async program as `structuredContent.code`. The four-line
 Beeper bootstrap records `started`, retrieves it, then calls `eval(code)()` in
@@ -106,12 +123,13 @@ are required before activation; a configured feature flag is not tool evidence.
 The model may still alter the bootstrap or bypass it. Moving branches out of its
 input reduces this failure surface; it is not an exactly-once guarantee.
 
-The Operator explicitly selects `gpt-5.3-codex-spark` with `medium` reasoning for
-Beeper by default. An exhausted Spark-specific bucket preselects
-`gpt-5.6-luna` with `low` reasoning. A proven nonzero Spark usage/rate-limit
+Missing or blank `CODEX_OPERATOR_BEEPER_MODEL` selects `gpt-5.6-luna` with
+`low` reasoning. Explicit selection may use the local `beeper`/low,
+`gpt-5.3-codex-spark`/medium, or Luna/low. When Spark is explicitly selected,
+an exhausted Spark-specific bucket preselects Luna/low. A proven nonzero Spark usage/rate-limit
 queue rejection may trigger one same-event Luna attempt because the first turn
-was not accepted. Timeout, process failure, uncertainty, acceptance, and Luna
-rejection never trigger another attempt. The model override never propagates to
+was not accepted. Local-provider outcomes never fall back. Timeout, process
+failure, uncertainty, acceptance, and Luna rejection never trigger another attempt. The model override never propagates to
 the Responder task. Spark/low is excluded from normal selection; explicit
 bounded diagnostics are described below.
 
@@ -124,11 +142,12 @@ running evidence disappears, that window starts fresh at the loss of evidence.
 The current standalone App Server may expose a live Desktop turn as
 `interrupted` without `completedAt`; that combination is unknown, never
 terminal. Expiry converges to the no-replay uncertainty path. For a bounded
-diagnostic comparison only, `CODEX_OPERATOR_BEEPER_MODEL` may explicitly select
-Spark or Luna; an empty value retains adaptive selection. A bounded low- or
+diagnostic comparison, `CODEX_OPERATOR_BEEPER_MODEL` may explicitly select
+`beeper`, Spark, or Luna; an empty value selects Luna/low. A bounded low- or
 high-effort Spark diagnostic additionally requires an explicit Spark model
 override and `CODEX_OPERATOR_BEEPER_REASONING_EFFORT=low` or `high`; clearing both
-values restores the normal Spark/medium or Luna/low policy.
+overrides returns to Luna/low, while clearing only the reasoning value keeps the
+explicitly selected model's normal low or medium policy.
 
 ## Responder lifecycle read lane
 

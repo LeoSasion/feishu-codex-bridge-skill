@@ -13,9 +13,18 @@ description: Configure, install, diagnose, and develop Feishu Codex Operator, th
 - Operator 管接收、持久路由和回传；固定 Beeper 只发送一次；Responder 独占业务执行与 final。
 - Final Callback 的 `request_id` 仅关联请求，不是身份认证。不要恢复 Page/capability/claim。
 - queue 接受或结果不确定后不重放；只有明确的 Spark 额度拒绝允许一次 Luna 兜底。
-- 正常使用 Spark/medium；所有 Operator 添加给 Spark 的外层指令、内层回调/附件说明
+- 未配置或留空时默认 Luna/low；可显式选择本地 `beeper`/low、Spark/medium 或
+  Luna/low。本地 provider 随运行时安装，协议外输入只返回已确认的固定身份声明。
+  目录使用 `visibility: list`，但 Desktop 下拉框及固定任务默认 provider 的接入仍待验证；
+  不得以目录可见性代替路由证据，也不能替换原生 provider/catalog 条目而影响 Spark/Luna。
+  可选 Python Responses 路由器仅追加目录项，原生请求仍送原生后端；不依赖
+  LiteLLM，不转换 Chat Completions。涉及此功能先读 `../../references/model-router.md`。
+  全局入口启用与安装分开；常驻生命周期、原生辅助工具及真实 Desktop 下拉/默认值
+  尚未验收，不能根据隔离测试自动启用。
+  本地 provider 失败或不确定时不兜底。
+  所有 Operator 添加给 Spark 的外层指令、内层回调/附件说明
   均用简洁结构化英文，飞书原句不翻译。附件元数据用无损 JSON 转义，不改真实路径。
-  Luna/low 为额度备选；中文控制模板仅可供 Luna 显式诊断，Spark 始终英文。
+  显式 Spark 的明确额度拒绝才允许一次 Luna/low 备选；中文控制模板仅可供 Luna 显式诊断，Spark 始终英文。
   Spark/low、high 仅供显式受控诊断；不覆盖 Responder 设置，也不构成重试理由.
 - 保留 `wake lease` 名称和行为。wake-up signal 是动作，deep link 是当前实现，可能导航
   Desktop；只针对 Beeper，不能据此认定执行成功。`itemsView=notLoaded` 不是驻留状态。

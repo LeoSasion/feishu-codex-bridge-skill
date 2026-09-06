@@ -41,11 +41,23 @@ class InstallUpgradeTests(unittest.TestCase):
                 )
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
                 self.assertTrue((runtime / "operator_core" / "runtime.py").is_file())
+                self.assertTrue((runtime / "operator_core" / "beeper_provider.py").is_file())
+                catalog = json.loads(
+                    (runtime / "operator_core" / "beeper_model_catalog.json").read_text()
+                )
+                self.assertEqual("beeper", catalog["models"][0]["slug"])
+                self.assertEqual("list", catalog["models"][0]["visibility"])
                 for name, value in preserved.items():
                     self.assertEqual(value, (runtime / name).read_bytes(), name)
                 manifest = json.loads((runtime / "runtime-manifest.json").read_text())
                 self.assertIn("operator_core/runtime.py", manifest["code_files"])
-                for relative in ("routing_cli.py", "operator_core/__init__.py", "operator_core/final_callback.py"):
+                for relative in (
+                    "routing_cli.py",
+                    "operator_core/__init__.py",
+                    "operator_core/final_callback.py",
+                    "operator_core/beeper_provider.py",
+                    "operator_core/beeper_model_catalog.json",
+                ):
                     self.assertEqual(
                         hashlib.sha256((runtime / relative).read_bytes()).hexdigest(),
                         manifest["code_files"][relative],

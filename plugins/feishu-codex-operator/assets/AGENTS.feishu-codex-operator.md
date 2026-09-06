@@ -28,10 +28,34 @@
   One Codex task may be actively bound to only one Feishu scope.
 - Configure one exact Beeper task UUID. It must never be used as a Responder or
   exposed as a `/init` candidate. Each newly admitted ordinary Feishu event
-  queues that Beeper with `gpt-5.3-codex-spark` and `medium` reasoning by default.
-  Spark with `low` reasoning is forbidden in normal selection. A bounded
-  diagnostic may select Spark/low only through the explicit Spark model and
-  reasoning overrides; it never changes the normal Spark/medium policy.
+  queues that Beeper with `gpt-5.6-luna` and `low` reasoning when
+  `CODEX_OPERATOR_BEEPER_MODEL` is absent or blank. Explicit selection may use
+  the deterministic local `beeper`, Spark, or Luna. Spark with `low`
+  reasoning is forbidden in normal selection. A bounded diagnostic may select
+  Spark/low only through the explicit Spark model and reasoning overrides.
+  These selections apply only to the fixed Beeper task, never the Responder.
+  The local `beeper` provider and private model catalog install with the
+  Operator runtime. The catalog uses `visibility: list`, but visibility alone
+  does not register a provider or change an existing Desktop task's default.
+  Desktop dropdown/default integration remains pending supported verification;
+  never replace native catalog entries/provider or send Spark/Luna to a third party.
+  The optional Python Responses router may preserve native traffic to its fixed
+  native backend and append explicit external model registrations. It uses no
+  LiteLLM SDK or Chat Completions conversion. Its separate, reversible entry-point
+  activation is never an automatic install step. Persistent lifecycle, native
+  auxiliary-tool compatibility and live Desktop picker/default verification remain
+  required before global activation; isolated tests alone are insufficient.
+  Operator starts one loopback-only Responses API
+  listener only when `beeper` is selected and passes its provider/catalog
+  settings only to that Beeper queue. It never modifies global Codex config.
+  The local provider accepts only model `beeper`, an exact current relay envelope
+  with one public 32-hex request_id,
+  and exactly one model-facing `exec` custom tool; it deterministically emits the
+  four-line bootstrap without model weights or sampling. HTTP and stream retry
+  counts are zero. Protocol-external input returns the fixed approved identity declaration
+  as assistant text, never a tool call. Older messages cannot supply the current
+  relay envelope. Provider failure, queue rejection, timeout, crash, or any
+  uncertain local outcome is terminal and never falls back to another model.
   Spark always receives concise, structured English Operator instructions,
   including nested callback guidance, attachment labels, and attachment-only
   placeholders. Preserve the Feishu user's original text without translation.
@@ -92,18 +116,18 @@
   refreshes coalesce. Above 5% with known percentages and no reached limit,
   due reads run in the background; low/unknown-percentage or reached-limit
   snapshots retain a pre-dispatch read. An unavailable snapshot remains fail-open.
-- If a fresh cache says the Spark bucket is exhausted, queue Beeper once with
-  `gpt-5.6-luna` and `low` reasoning instead. If a Spark queue attempt returns a
-  proven nonzero usage-limit or rate-limit rejection, refresh the cache and may
-  make exactly one same-event Luna/low queue attempt. This is the only automatic
-  CLI fallback; never fall back after timeout, crash, uncertain outcome, an
-  accepted queue, or a Luna rejection. Model overrides apply only to Beeper;
-  Beeper still omits model and thinking when it sends to the Responder. A
-  bounded diagnostic may set `CODEX_OPERATOR_BEEPER_MODEL` only to Spark or Luna;
-  leave it empty for normal adaptive selection. A bounded Spark-only diagnostic
+- If Spark is explicitly selected and a fresh cache says its bucket is
+  exhausted, queue Beeper once with `gpt-5.6-luna` and `low` reasoning instead.
+  If an explicit Spark queue attempt returns a proven nonzero usage-limit or
+  rate-limit rejection, refresh the cache and may make exactly one same-event
+  Luna/low queue attempt. This is the only automatic CLI fallback; never fall
+  back after timeout, crash, uncertain outcome, an accepted queue, a Luna
+  rejection, or any local `beeper` outcome. Beeper still omits model and
+  thinking when it sends to the Responder. `CODEX_OPERATOR_BEEPER_MODEL` may be
+  blank, `beeper`, Spark, or Luna; blank resolves to Luna/low. A bounded Spark-only diagnostic
   may additionally set `CODEX_OPERATOR_BEEPER_REASONING_EFFORT=low` or `high`, but only
-  together with an explicit Spark model override; empty restores the normal
-  Spark/medium or Luna/low policy.
+  together with an explicit Spark model override; empty reasoning keeps
+  `beeper`/low, Spark/medium, or Luna/low according to the selected model.
 - A failed quota read keeps the last snapshot only as stale diagnostics and must
   not block dispatch. Only a fresh server-classified reached limit may stop a
   pre-dispatch request; then do not queue or send the Beeper wake-up signal. Never

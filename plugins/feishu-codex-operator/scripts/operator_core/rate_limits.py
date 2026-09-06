@@ -12,8 +12,9 @@ from typing import Any, Callable
 
 from .app_server import AppServerError, AppServerSession
 from .beeper_relay import (
+    BEEPER_DEFAULT_MODEL,
     BEEPER_FALLBACK_MODEL,
-    BEEPER_PRIMARY_REASONING_EFFORT,
+    BEEPER_FALLBACK_REASONING_EFFORT,
     BEEPER_PRIMARY_MODEL,
     beeper_reasoning_effort,
     discover_codex_executable,
@@ -129,8 +130,8 @@ class RateLimitDecision:
     window_duration_minutes: int | None = None
     reset_at: int | None = None
     reached_type: str = ""
-    beeper_model: str = BEEPER_PRIMARY_MODEL
-    beeper_reasoning_effort: str = BEEPER_PRIMARY_REASONING_EFFORT
+    beeper_model: str = BEEPER_DEFAULT_MODEL
+    beeper_reasoning_effort: str = BEEPER_FALLBACK_REASONING_EFFORT
     beeper_limit_id: str = ""
     beeper_remaining_percent: int | None = None
     beeper_window_duration_minutes: int | None = None
@@ -282,9 +283,9 @@ class AdaptiveRateLimitGuard:
                 False,
                 refreshed,
                 "unavailable",
-                beeper_model=self._beeper_model_override or BEEPER_PRIMARY_MODEL,
+                beeper_model=self._beeper_model_override or BEEPER_DEFAULT_MODEL,
                 beeper_reasoning_effort=beeper_reasoning_effort(
-                    self._beeper_model_override or BEEPER_PRIMARY_MODEL,
+                    self._beeper_model_override or BEEPER_DEFAULT_MODEL,
                     primary_override=self._beeper_reasoning_effort_override,
                 ),
             )

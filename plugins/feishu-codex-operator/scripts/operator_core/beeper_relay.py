@@ -16,6 +16,15 @@ from typing import Any, Callable
 from .config import OperatorConfig
 from .final_callback import FinalCallbackStore, FinalCallbackStoreError
 from .dispatch import CallbackPump, CallbackWait
+from .beeper_provider import (
+    BEEPER_LOCAL_MODEL,
+    BEEPER_PROVIDER_NAME,
+    BEEPER_PROTOCOL_INSTRUCTIONS,
+    BeeperProviderError,
+    BeeperProviderServer,
+    beeper_bootstrap,
+    beeper_model_catalog_path,
+)
 
 
 THREAD_ID_PATTERN = re.compile(
@@ -25,13 +34,16 @@ QUEUE_TIMEOUT_SECONDS = 20
 QUEUE_DIAGNOSTIC_MAX_CHARS = 32_768
 BEEPER_PRIMARY_MODEL = "gpt-5.3-codex-spark"
 BEEPER_FALLBACK_MODEL = "gpt-5.6-luna"
+BEEPER_DEFAULT_MODEL = BEEPER_FALLBACK_MODEL
 BEEPER_PRIMARY_REASONING_EFFORT = "medium"
 BEEPER_FALLBACK_REASONING_EFFORT = "low"
 BEEPER_DEFAULT_PROMPT_LANGUAGE = "en"
 BEEPER_FALLBACK_PROMPT_LANGUAGE = "zh-cn"
 BEEPER_WAKE_LEASE_SECONDS = 30 * 60
 BEEPER_WAKE_FALLBACK_SECONDS = 30
-_BEEPER_MODELS = frozenset({BEEPER_PRIMARY_MODEL, BEEPER_FALLBACK_MODEL})
+_BEEPER_MODELS = frozenset(
+    {BEEPER_LOCAL_MODEL, BEEPER_PRIMARY_MODEL, BEEPER_FALLBACK_MODEL}
+)
 _BEEPER_PROMPT_LANGUAGES = frozenset(
     {BEEPER_DEFAULT_PROMPT_LANGUAGE, BEEPER_FALLBACK_PROMPT_LANGUAGE}
 )
@@ -50,6 +62,8 @@ def beeper_reasoning_effort(model: str, *, primary_override: str = "") -> str:
             raise ValueError("unsupported Spark Beeper reasoning override")
         return primary_override or BEEPER_PRIMARY_REASONING_EFFORT
     if model == BEEPER_FALLBACK_MODEL:
+        return BEEPER_FALLBACK_REASONING_EFFORT
+    if model == BEEPER_LOCAL_MODEL:
         return BEEPER_FALLBACK_REASONING_EFFORT
     raise ValueError("unsupported minimal Beeper model")
 
@@ -211,6 +225,7 @@ class BeeperRelayClient:
         wake_signal_sender: Callable[[str], None] | None = None,
         codex_executable: Path | None = None,
         lifecycle_observer: Any | None = None,
+        local_provider: BeeperProviderServer | None = None,
         wake_lease_seconds: float = BEEPER_WAKE_LEASE_SECONDS,
         wake_fallback_seconds: float = BEEPER_WAKE_FALLBACK_SECONDS,
         monotonic: Callable[[], float] = time.monotonic,
@@ -228,6 +243,7 @@ class BeeperRelayClient:
         )
         self._codex_executable = codex_executable
         self._lifecycle_observer = lifecycle_observer
+        self._local_provider = local_provider or BeeperProviderServer()
         self._wake_lease_seconds = float(wake_lease_seconds)
         self._wake_fallback_seconds = float(wake_fallback_seconds)
         self._monotonic = monotonic
@@ -417,17 +433,11 @@ class BeeperRelayClient:
     def _relay_prompt(
         *, request_id: str,
         language: str = BEEPER_DEFAULT_PROMPT_LANGUAGE,
-        model: str = BEEPER_PRIMARY_MODEL,
+        model: str = BEEPER_DEFAULT_MODEL,
     ) -> str:
         if language not in _BEEPER_PROMPT_LANGUAGES or model not in _BEEPER_MODELS:
             raise ValueError("unsupported minimal Beeper prompt policy")
-        arguments = json.dumps({"request_id": request_id}, separators=(",", ":"))
-        code = (
-            "const started=Date.now();\n"
-            'const relay=ALL_TOOLS.find(t=>t.name.endsWith("__take_relay"));\n'
-            "const result=await tools[relay.name](" + arguments + ");\n"
-            "await eval(result.structuredContent.code)();\n"
-        )
+        code = beeper_bootstrap(request_id)
         if language == BEEPER_FALLBACK_PROMPT_LANGUAGE and model == BEEPER_FALLBACK_MODEL:
             instructions = (
                 "你是 Feishu Codex Operator 的最小 Beeper。第一项动作只能调用一次 exec，"
@@ -435,14 +445,47 @@ class BeeperRelayClient:
                 "不要另外调用发送工具。任何结果都立即结束，不得重试。\n"
             )
         else:
-            instructions = (
-                "You are the minimal Feishu Codex Operator Beeper.\n"
-                "Your first action must be exactly one call to exec with the code below. "
-                "No text before the call. Copy these four lines exactly.\n"
-                "Execute only the Operator MCP-generated code; never print, rewrite, or expand it. "
-                "After exec returns, stop on every outcome. Never send separately, retry, or call Final Callback.\n"
-            )
+            instructions = BEEPER_PROTOCOL_INSTRUCTIONS
         return instructions + code
+
+    def start(self) -> None:
+        """Start the optional local provider before the event consumer is ready."""
+
+        if str(self.config.beeper_model_override or "") == BEEPER_LOCAL_MODEL:
+            self._local_provider_config()
+
+    def _local_provider_config(self) -> list[str]:
+        catalog = beeper_model_catalog_path(self.config.runtime_dir)
+        try:
+            catalog = catalog.resolve(strict=True)
+            base_url = self._local_provider.start()
+        except (OSError, BeeperProviderError) as exc:
+            raise RelayUnavailable(
+                "local Beeper provider could not start",
+                code="beeper_provider_unavailable",
+            ) from exc
+        quoted_catalog = json.dumps(str(catalog), ensure_ascii=True)
+        quoted_base_url = json.dumps(base_url, ensure_ascii=True)
+        return [
+            "--config",
+            f'model_provider="{BEEPER_PROVIDER_NAME}"',
+            "--config",
+            f'model_providers.{BEEPER_PROVIDER_NAME}.name="Beeper"',
+            "--config",
+            f"model_providers.{BEEPER_PROVIDER_NAME}.base_url={quoted_base_url}",
+            "--config",
+            f'model_providers.{BEEPER_PROVIDER_NAME}.wire_api="responses"',
+            "--config",
+            f"model_providers.{BEEPER_PROVIDER_NAME}.requires_openai_auth=false",
+            "--config",
+            f"model_providers.{BEEPER_PROVIDER_NAME}.request_max_retries=0",
+            "--config",
+            f"model_providers.{BEEPER_PROVIDER_NAME}.stream_max_retries=0",
+            "--config",
+            f"model_providers.{BEEPER_PROVIDER_NAME}.stream_idle_timeout_ms=5000",
+            "--config",
+            f"model_catalog_json={quoted_catalog}",
+        ]
 
     def send(self, *args: Any, **kwargs: Any) -> ResponderAnswer:
         """Synchronous adapter for isolated tests and bounded diagnostic callers."""
@@ -469,7 +512,7 @@ class BeeperRelayClient:
         local_audio: list[Path] | None = None,
         additional_context: dict[str, str] | None = None,
         on_dispatching: Callable[[RelayDispatchHandle], None] | None = None,
-        beeper_model: str = BEEPER_PRIMARY_MODEL,
+        beeper_model: str = BEEPER_DEFAULT_MODEL,
         allow_rate_limit_fallback: Callable[[], bool] | None = None,
         observation: Any | None = None,
         timing: Any | None = None,
@@ -573,9 +616,10 @@ class BeeperRelayClient:
                     model,
                     "--config",
                     f'model_reasoning_effort="{reasoning_effort}"',
-                    "--message",
-                    relay_prompt,
                 ]
+                if model == BEEPER_LOCAL_MODEL:
+                    argv.extend(self._local_provider_config())
+                argv.extend(["--message", relay_prompt])
                 try:
                     completed = self._runner(
                         argv,
@@ -751,8 +795,12 @@ class BeeperRelayClient:
         try:
             self.codex_executable
             self.beeper_thread_id
+            if str(self.config.beeper_model_override or "") == BEEPER_LOCAL_MODEL:
+                beeper_model_catalog_path(self.config.runtime_dir).resolve(strict=True)
+                if not self._local_provider.is_running():
+                    return "unavailable"
             return "beeper-relay"
-        except RelayError:
+        except (OSError, RelayError):
             return "unavailable"
 
     def pending_count(self) -> int:
@@ -773,3 +821,4 @@ class BeeperRelayClient:
             observation.close()
         for observation in observations:
             observation.join()
+        self._local_provider.close()

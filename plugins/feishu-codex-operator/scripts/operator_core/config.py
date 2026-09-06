@@ -9,7 +9,7 @@ import re
 from typing import Mapping
 
 
-OPERATOR_VERSION = "4.2.0-alpha.86"
+OPERATOR_VERSION = "4.2.0-alpha.96"
 
 BOOLEAN_ENV_DEFAULTS = {
     "CODEX_OPERATOR_DOWNLOAD_RESOURCES": True,
@@ -21,11 +21,11 @@ ENUM_ENV_SPECS = {
     # byte-for-character at the Operator -> lark-cli argument boundary.
     # Markdown remains an explicit opt-in presentation transform.
     "CODEX_OPERATOR_REPLY_FORMAT": ("text", frozenset({"text", "markdown"})),
-    # Empty preserves adaptive Spark -> Luna selection. An explicit value is
-    # reserved for bounded diagnostics and never changes Responder settings.
+    # Empty resolves to Luna/low. Spark, Luna, and the deterministic local
+    # Beeper remain explicit choices and never change Responder settings.
     "CODEX_OPERATOR_BEEPER_MODEL": (
-        "",
-        frozenset({"", "gpt-5.3-codex-spark", "gpt-5.6-luna"}),
+        "gpt-5.6-luna",
+        frozenset({"", "beeper", "gpt-5.3-codex-spark", "gpt-5.6-luna"}),
     ),
     # Low and high are bounded Spark-only diagnostics. Empty keeps the closed
     # normal policy: Spark/medium or Luna/low.
@@ -96,7 +96,10 @@ def _int_env(name: str) -> int:
 
 def _enum_env(name: str) -> str:
     default, choices = ENUM_ENV_SPECS[name]
-    value = os.environ.get(name, default).strip().lower()
+    raw = os.environ.get(name)
+    value = raw.strip().lower() if raw is not None else default
+    if not value:
+        return default
     return value if value in choices else default
 
 

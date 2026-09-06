@@ -295,6 +295,13 @@ function Write-RuntimeManifest {
         'operator_core/lark.py',
         'operator_core/rate_limits.py',
         'operator_core/responder_observer.py',
+        'operator_core/beeper_provider.py',
+        'operator_core/beeper_model_catalog.json',
+        'operator_core/model_registry.py',
+        'operator_core/model_router.py',
+        'operator_core/model_router_config.py',
+        'operator_model_router.py',
+        'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
         'operator_core/state.py'
@@ -306,7 +313,7 @@ function Write-RuntimeManifest {
     }
     $manifest = [ordered]@{
         schema_version = 1
-        operator_version = '4.2.0-alpha.86'
+        operator_version = '4.2.0-alpha.96'
         code_files = $hashes
         start_hook_sha256 = (Get-FileHash -LiteralPath $startHook -Algorithm SHA256).Hash.ToLowerInvariant()
         stop_hook_sha256 = (Get-FileHash -LiteralPath $stopHook -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -348,6 +355,13 @@ if ($HooksOnly) {
     'operator_core\lark.py',
     'operator_core\rate_limits.py',
     'operator_core\responder_observer.py',
+    'operator_core\beeper_provider.py',
+    'operator_core\beeper_model_catalog.json',
+    'operator_core\model_registry.py',
+    'operator_core\model_router.py',
+    'operator_core\model_router_config.py',
+    'operator_model_router.py',
+    'model-router-requirements.txt',
     'operator_core\beeper_relay.py',
     'operator_core\runtime.py',
     'operator_core\state.py'
@@ -365,5 +379,5 @@ if (Test-Path -LiteralPath $health -PathType Leaf) {
     Remove-Item -LiteralPath $health -Force
 }
 
-Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.86 into $runtime"
+Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.96 into $runtime"
 Write-Output 'The Operator remains stopped. Configure the minimal Beeper UUID, register Final Callback routing, review Hooks in Desktop settings, then start it.'

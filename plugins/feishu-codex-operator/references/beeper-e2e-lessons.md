@@ -90,6 +90,33 @@ JSON data only. Older MCP payloads must stop rather than fall back to model
 copying. A bootstrap can still be rewritten: verify the loaded MCP contract,
 same-exec program invocation, timing, and actual Feishu replies before activation.
 
+Alpha.87 adds a deterministic loopback Responses API model named `beeper` and a
+private hidden catalog installed with Operator. Offline engine, HTTP/SSE,
+catalog-shape, queue-argument, and install-integrity tests cover the fixed
+custom-tool call and terminal response. An isolated ephemeral invocation with
+the current Desktop-bundled CLI also completed the real Responses/custom-tool
+protocol and returned the terminal `DONT_NOTIFY`; this caught that the wire name
+is model-facing `exec`, not the application-qualified tool name. It used no live
+Desktop task or Feishu event, so it is not evidence that the current Desktop
+Beeper loaded the provider or completed a Feishu E2E. Keep local-provider
+failures terminal with no Spark/Luna fallback.
+
+Alpha.88 fixes an important gap in the alpha.87 probe: a synthetic
+`request_id="..."` input was not the actual relay envelope, which embeds a JSON
+colon instead. The provider now matches the shared exact relay template from
+the latest user message only. Unit tests exercise the real producer template,
+old-history isolation, known-call continuation, and the approved identity text
+over JSON and SSE. The catalog uses `visibility: list`, not `hide`.
+
+The current CLI's generated `thread/settings/update` schema permits `model`
+and `effort`, but contains no provider/config override. `model/list` has no
+provider selector. Official config documentation exposes a startup catalog and
+one selected provider, not per-entry provider routing. Neither changing the
+catalog nor changing the model string establishes Desktop provider selection.
+Dropdown/default integration therefore remains unverified. Preserve normal
+Spark/Luna routing and do not modify the running task or global provider to
+simulate successful integration.
+
 Do not activate an opaque-payload code relay until a live Beeper invocation
 demonstrates both local payload retrieval and Desktop sending in one code
 execution, without model resampling between them. A standalone plugin MCP

@@ -1840,6 +1840,9 @@ class OperatorRuntime:
 
     def run(self) -> int:
         try:
+            # A selected local Beeper provider must be ready before Feishu intake
+            # begins. Failure is pre-dispatch and never creates a callback route.
+            self.relay.start()
             self.bot_open_id = get_bot_open_id(self.lark_cli, self.config)
             rate_limit = self.rate_limits.prime()
             if rate_limit.status == "unavailable":

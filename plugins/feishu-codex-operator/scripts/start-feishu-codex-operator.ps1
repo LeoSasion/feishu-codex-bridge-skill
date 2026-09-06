@@ -173,6 +173,13 @@ function Assert-OperatorRuntimeManifest {
         'operator_core/lark.py',
         'operator_core/rate_limits.py',
         'operator_core/responder_observer.py',
+        'operator_core/beeper_provider.py',
+        'operator_core/beeper_model_catalog.json',
+        'operator_core/model_registry.py',
+        'operator_core/model_router.py',
+        'operator_core/model_router_config.py',
+        'operator_model_router.py',
+        'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
         'operator_core/state.py'
@@ -249,7 +256,7 @@ function Assert-OperatorEnvSemantics {
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_ACCESS_MODE'; Values = @('locked', 'compat') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_LIFECYCLE_MODE'; Values = @('hooks', 'manual') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_REPLY_FORMAT'; Values = @('text', 'markdown') },
-        [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_MODEL'; Values = @('', 'gpt-5.3-codex-spark', 'gpt-5.6-luna') },
+        [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_MODEL'; Values = @('', 'beeper', 'gpt-5.3-codex-spark', 'gpt-5.6-luna') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_REASONING_EFFORT'; Values = @('', 'low', 'high') },
         [pscustomobject]@{ Name = 'CODEX_OPERATOR_BEEPER_PROMPT_LANGUAGE'; Values = @('', 'en', 'zh-cn') }
     )

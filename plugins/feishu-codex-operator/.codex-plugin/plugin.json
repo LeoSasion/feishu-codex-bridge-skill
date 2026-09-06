@@ -1,15 +1,15 @@
 {
   "name": "feishu-codex-operator",
-  "version": "1.0.0",
+  "version": "1.0.0+codex.20260905192636",
   "description": "Map Feishu conversations to Codex Desktop tasks with minimal Beeper relay and Final Callback delivery.",
   "author": {
     "name": "Feishu Codex Operator Project"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "飞书 Codex Operator（接线员）",
-    "shortDescription": "自适应 Beeper 唤醒信号，Final Callback 回传",
-    "longDescription": "飞书 Codex 接线员：持久会话映射、最小 Beeper 中继、自适应唤醒与额度检查、只读任务目录和生命周期观察。Responder 独占业务执行，Final Callback 回传最终答案。",
+    "displayName": "\u98de\u4e66 Codex Operator\uff08\u63a5\u7ebf\u5458\uff09",
+    "shortDescription": "\u81ea\u9002\u5e94 Beeper \u5524\u9192\u4fe1\u53f7\uff0cFinal Callback \u56de\u4f20",
+    "longDescription": "\u98de\u4e66 Codex \u63a5\u7ebf\u5458\uff1a\u6301\u4e45\u4f1a\u8bdd\u6620\u5c04\u3001\u6700\u5c0f Beeper \u4e2d\u7ee7\u3001\u81ea\u9002\u5e94\u5524\u9192\u4e0e\u989d\u5ea6\u68c0\u67e5\u3001\u53ea\u8bfb\u4efb\u52a1\u76ee\u5f55\u548c\u751f\u547d\u5468\u671f\u89c2\u5bdf\u3002Responder \u72ec\u5360\u4e1a\u52a1\u6267\u884c\uff0cFinal Callback \u56de\u4f20\u6700\u7ec8\u7b54\u6848\u3002",
     "developerName": "Feishu Codex Operator Project",
     "category": "Productivity",
     "capabilities": [
@@ -19,7 +19,7 @@
       "Quota cache and content-free lifecycle observation",
       "Responder-owned Final Callback"
     ],
-    "defaultPrompt": "使用 $feishu-codex-operator 完成本项目的配置、诊断或开发；先核实源码与运行状态，再按请求范围操作。"
+    "defaultPrompt": "\u4f7f\u7528 $feishu-codex-operator \u5b8c\u6210\u672c\u9879\u76ee\u7684\u914d\u7f6e\u3001\u8bca\u65ad\u6216\u5f00\u53d1\uff1b\u5148\u6838\u5b9e\u6e90\u7801\u4e0e\u8fd0\u884c\u72b6\u6001\uff0c\u518d\u6309\u8bf7\u6c42\u8303\u56f4\u64cd\u4f5c\u3002"
   },
   "mcpServers": "./.mcp.json"
 }
