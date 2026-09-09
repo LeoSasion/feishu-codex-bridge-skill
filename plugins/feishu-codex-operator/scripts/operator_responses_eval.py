@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+from contextvars import ContextVar
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -240,6 +241,15 @@ async def collect_child(child):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+def json_output_summary(value):
+    """Counts from an already validated JSON snapshot, never names/text/IDs."""
+    counts = dict.fromkeys(("message", "reasoning", "function_call", "custom_tool_call", "other"), 0)
+    for item in value["output"]:
+        kind = item["type"]
+        counts[kind if kind in counts else "other"] += 1
+    return {"scope": "validated_json_snapshot_not_call_release", "output_counts": counts}
+
+
 async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exact"):
     if final_text_policy not in FINAL_TEXT_POLICIES:
         raise RouterError("invalid_final_text_policy")
@@ -254,7 +264,34 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
     version = match[1].decode()
     catalog = json.loads(Path(__file__).with_name("operator_core").joinpath(
         "beeper_model_catalog.json").read_text(encoding="utf-8"))
-    router = ModelRouter(ModelRegistry({"version": 2, "models": [row]}, catalog), secrets.token_hex(32))
+    dispatch_round = ContextVar("evaluation_dispatch_round", default=None)
+    dispatches = []
+
+    class EvaluationRouter(ModelRouter):
+        # Observation only in this disposable evaluator. Production routing is unchanged.
+        async def proxy(self, request, url, body, headers, *, context=None, stream=False):
+            record = {"dispatch_index": len(dispatches) + 1, "transport_result": "raised",
+                      "json_snapshot": None}
+            dispatches.append(record)
+            token = dispatch_round.set(record)
+            try:
+                result = await super().proxy(request, url, body, headers, context=context, stream=stream)
+                record.update(transport_result="returned", http_status=result.status)
+                return result
+            except asyncio.CancelledError:
+                record["transport_result"] = "cancelled"
+                raise
+            finally:
+                dispatch_round.reset(token)
+
+        async def read_adapted_json(self, upstream, context, begin):
+            value = await super().read_adapted_json(upstream, context, begin)
+            record = dispatch_round.get()
+            if record is not None:
+                record["json_snapshot"] = json_output_summary(value)
+            return value
+
+    router = EvaluationRouter(ModelRegistry({"version": 2, "models": [row]}, catalog), secrets.token_hex(32))
     admitted = asyncio.Event()
     request_times = []
     requests, active, limit = 0, 0, {"cli_nested": 2, "cli_multiround": 3,
@@ -303,6 +340,7 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
         settings = {"model": row["slug"], "model_provider": "operator_fixture",
             "model_reasoning_effort": row["reasoning_efforts"][0], "model_catalog_json": str(catalog_file),
             "approval_policy": "never", "web_search": "disabled", "analytics.enabled": False,
+            "features.plugins": False, "features.remote_plugin": False,
             "model_providers.operator_fixture.name": "Operator explicit evaluation",
             "model_providers.operator_fixture.base_url": f"http://127.0.0.1:{runner.addresses[0][1]}" + router.prefix,
             "model_providers.operator_fixture.wire_api": "responses",
@@ -385,6 +423,10 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             except OSError:
                 report.update(status="failed", cleanup_failed=True)
         report.update(requests=requests, request_budget_exceeded=requests > limit,
+                      client_requests=requests, admitted_client_requests=len(request_times),
+                      budget_rejected_client_requests=max(0, requests - limit),
+                      upstream_dispatch_attempts=len(dispatches), upstream_dispatches=dispatches,
+                      upstream_header_responses=router.metrics.stages.get("upstream_headers", {}).get("count", 0),
                       router_failure=router.last_failure, timing=router.metrics.snapshot(),
                       elapsed_ms=round((time.perf_counter() - begin) * 1000))
         if request_times:

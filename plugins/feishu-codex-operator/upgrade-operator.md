@@ -1,5 +1,11 @@
 # Upgrade and naming cutover
 
+Development source alpha.123 tightens synthetic probe final-text matching and
+binds new probe receipts to the endpoint contract, adapter and combined evaluator
+revision. It adds content-free CLI request/JSON-output diagnostics. Production
+routing and retry policy are unchanged; published v1.1.0 remains alpha.122.
+Old evidence is retained and cannot be stamped with the new evaluator digest.
+
 Version notes describe when behavior was introduced; they do not establish the
 installed version. Verify that separately using read-only status and the runtime
 manifest. Older stopped-install instructions are not a general requirement to

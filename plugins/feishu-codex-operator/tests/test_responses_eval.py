@@ -10,11 +10,21 @@ from unittest.mock import patch
 
 from test_responses_tools import ROUTE
 from test_responses_events import events_for, wire
-from operator_responses_eval import EXPECTED, SOURCE, STOP_CASES, Fixture, evaluate, isolated_environment, verify_final_message, prompt_for
+from operator_responses_eval import EXPECTED, SOURCE, STOP_CASES, Fixture, evaluate, isolated_environment, verify_final_message, prompt_for, json_output_summary
 from operator_core.responses_tool_adapter import dumps
 
 
 class EvalFixtureTests(unittest.TestCase):
+    def test_json_diagnostics_retain_only_fixed_counts(self):
+        value = {"output": [{"type": kind, "name": "PRIVATE_TOOL_NAME", "id": "PRIVATE_ID",
+                  "arguments": "PRIVATE_ARGUMENTS", "content": [{"text": "PRIVATE_TEXT"}]}
+                 for kind in ("message", "reasoning", "custom_tool_call", "function_call", "PROVIDER_DEFINED_TYPE")]}
+        before = deepcopy(value)
+        summary = json_output_summary(value)
+        self.assertEqual(summary, {"scope": "validated_json_snapshot_not_call_release",
+            "output_counts": {"message": 1, "reasoning": 1, "function_call": 1, "custom_tool_call": 1, "other": 1}})
+        self.assertEqual(value, before)
+
     def test_marker_line_policy_is_bounded_and_preserves_exact_bytes(self):
         from operator_core.responses_capabilities import RouterError
         with tempfile.TemporaryDirectory() as directory:
@@ -176,6 +186,8 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                                   {"type": "response.output_text.delta", "output_index": 0, "item_id": item["id"], "content_index": 0, "delta": marker},
                                   {"type": "response.output_item.done", "output_index": 0, "item": item},
                                   {"type": "response.completed", "response": response}]
+                    if body.get("stream") is False:
+                        return web.json_response(events[-1]["response"])
                     return web.Response(body=wire(events), content_type="text/event-stream")
                 app = web.Application()
                 app.router.add_post("/v1/responses", upstream)
@@ -184,6 +196,8 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                 row = deepcopy(ROUTE)
                 row.update(api_base=str(server.make_url("/v1")), reasoning_efforts=["low"])
                 row["responses"].update(parallel_tool_calls=False, text_tool_outputs="json_string")
+                if behavior == "extra_round":
+                    row["responses"]["upstream_response_mode"] = "json"
                 try:
                     report = await evaluate(row, case, Path(os.environ["CODEX_OPERATOR_TEST_CLI"]), final_text_policy=policy)
                     accepted = behavior == "correct" or (policy == "marker_line_v1" and behavior == "leading_lf")
@@ -198,6 +212,19 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                     if behavior == "leading_lf":
                         self.assertFalse(report["verification_exact"])
                         self.assertTrue(report["verification_matched_after_trim"])
+                    self.assertEqual(report["client_requests"], report["requests"])
+                    self.assertEqual(report["upstream_dispatch_attempts"], len(received))
+                    self.assertEqual(report["upstream_header_responses"], len(received))
+                    self.assertEqual(report["budget_rejected_client_requests"], 1 if behavior == "extra_round" else 0)
+                    self.assertEqual(report["admitted_client_requests"], len(received))
+                    if behavior == "extra_round":
+                        self.assertEqual(report["client_requests"], len(received) + 1)
+                        for dispatch in report["upstream_dispatches"]:
+                            self.assertEqual(dispatch["transport_result"], "returned")
+                            self.assertEqual(dispatch["json_snapshot"]["output_counts"], {
+                                "message": 0, "reasoning": 0, "function_call": 0, "custom_tool_call": 1, "other": 0})
+                    else:
+                        self.assertTrue(all(d["json_snapshot"] is None for d in report["upstream_dispatches"]))
                 finally:
                     await server.close()
 

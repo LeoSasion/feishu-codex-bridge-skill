@@ -10,6 +10,28 @@ model selection, wake lease, lifecycle waiting, metadata-only requests,
 and App Server child cleanup. Run both while the exact installed service is
 stopped and no callback is pending. Neither proves live Feishu delivery.
 
+## Alpha.123 development validation (2026-09-09, unpublished)
+
+Final full regression passed 415 methods in 70.933 seconds. The four opt-in
+CLI methods ran against the installed official CLI 0.153.4; only the two Windows
+symlink subcases requiring privilege 1314 were skipped. Package inventory,
+Python/PowerShell syntax and rule-mirror audit passed for 107 plugin files.
+This source is not a new published release or an installed-runtime upgrade.
+
+The initial full run is retained: 415 methods in 164.306 seconds, one CLI timeout
+followed by a Windows temporary-file lock error, and the same two skips. The
+fixture now stops its exact child before home cleanup and disables unrelated
+plugin discovery/download in disposable CLI configuration. Eleven targeted CLI
+and evaluation tests passed after that change, before the final full run.
+
+The exact-text regression first reproduced all five whitespace false passes;
+they now fail correctly with unchanged diagnostic comparisons. Only two methods
+were added: the whitespace regression and the fixed-count diagnostic privacy
+check. Existing probe/profile/extra-round CLI cases cover the remaining changes.
+One separately reserved live DeepSeek workspace diagnostic passed under the new
+evaluator, without reproducing the old extra request. Its narrow scope and
+retained failures are recorded in [official online models](official-online-models.md).
+
 ## v1.1.0 / alpha.122 release validation (2026-09-09)
 
 The full isolated suite ran 413 test methods in 86.703 seconds with no failures.

@@ -95,20 +95,22 @@ class ProfileTests(unittest.TestCase):
                 self.assertEqual(report["evaluator_bound"], change != "unbound")
                 self.assertEqual(report["evaluator_changed"], change == "changed")
 
-    def test_profile_build_requires_matching_evaluator_for_every_cli_report(self):
+    def test_profile_build_requires_matching_evaluator_for_cli_and_probe_reports(self):
         profile = self.profile()
         reports = [{**check, "synthetic_only": True, **{key: profile[key] for key in
                     ("contract_sha256", "adapter_sha256", "evaluator_sha256")}} for check in profile["checks"]]
         built = profile_from_reports("synthetic-build", profile["registration"], reports)
         self.assertTrue(inspect_profile(built)["isolated_cli_verified"])
-        for value in (None, "0" * 64):
-            changed = deepcopy(reports)
-            if value is None:
-                changed[0].pop("evaluator_sha256")
-            else:
-                changed[0]["evaluator_sha256"] = value
-            with self.subTest(value=value), self.assertRaisesRegex(RouterError, "evaluator_mismatch"):
-                profile_from_reports("synthetic-stale", profile["registration"], changed)
+        for case in ("cli_nested", "json", "unicode-json"):
+            for value in (None, "0" * 64):
+                changed = [deepcopy(reports[0])]
+                changed[0].update(case=case, cli_version="0.153.4" if case.startswith("cli_") else "none")
+                if value is None:
+                    changed[0].pop("evaluator_sha256")
+                else:
+                    changed[0]["evaluator_sha256"] = value
+                with self.subTest(case=case, value=value), self.assertRaisesRegex(RouterError, "evaluator_mismatch"):
+                    profile_from_reports("synthetic-stale", profile["registration"], changed)
 
     def test_invalid_evidence_fields_dates_and_duplicates_refused(self):
         for mutate in (lambda p: p["checks"][0].update(prompt="private"),

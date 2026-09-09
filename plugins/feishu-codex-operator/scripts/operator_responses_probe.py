@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ import time
 
 from operator_core.model_registry import ModelRegistry, RouterError
 from operator_core.model_router_config import atomic_write, read_registration
+from operator_core.responses_profiles import adapter_digest, contract_digest, evaluator_digest
 from operator_core.responses_tool_adapter import EXEC_GRAMMAR, dumps, loads
 
 
@@ -78,7 +80,11 @@ async def probe(row, case):
     router = ModelRouter(registry, secrets.token_hex(32))
     runner = web.AppRunner(router.app(), access_log=None, shutdown_timeout=2)
     report = {"case": case, "status": "failed", "requests": 0, "execution_performed": False,
-              "stages": [], "configured_capabilities_are_not_verification": True}
+              "stages": [], "configured_capabilities_are_not_verification": True,
+              "synthetic_only": True, "cli_version": "none",
+              "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "contract_sha256": contract_digest(row), "adapter_sha256": adapter_digest(),
+              "evaluator_sha256": evaluator_digest()}
     await runner.setup()
     started = time.monotonic()
     try:
@@ -170,7 +176,7 @@ async def probe(row, case):
                            for part in item.get("content", []) if part.get("type") == "output_text")
             report["verification_exact"] = text == verification
             report["verification_after_trim"] = text.strip() == verification
-            if not report["verification_after_trim"]:
+            if not report["verification_exact"]:
                 raise RouterError("probe_synthetic_output_not_consumed")
             report["status"] = "passed"
     except Exception as exc:

@@ -150,6 +150,8 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
                     "model_reasoning_effort": "low", "model_catalog_json": str(catalog),
                     "approval_policy": "never",
                     "web_search": "disabled",
+                    "features.plugins": False,
+                    "features.remote_plugin": False,
                     "model_providers.operator_fixture.name": "Operator synthetic fixture",
                     "model_providers.operator_fixture.base_url": endpoint,
                     "model_providers.operator_fixture.wire_api": "responses",
@@ -189,7 +191,13 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
                         stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                         creationflags=0x08000000 if os.name == "nt" else 0)
-                    stdout, stderr = await asyncio.wait_for(child.communicate(), timeout=45)
+                    try:
+                        stdout, stderr = await asyncio.wait_for(child.communicate(), timeout=45)
+                    finally:
+                        # Stop the exact disposable child before its home is cleaned.
+                        if child.returncode is None:
+                            child.kill()
+                            await child.wait()
                 details = {"exit_code": child.returncode, "request_count": len(received),
                            "wire_tools": wire_tools, "diagnostics": router.last_failure,
                            "synthetic_outputs": [item.get("output") for body in received[1:]

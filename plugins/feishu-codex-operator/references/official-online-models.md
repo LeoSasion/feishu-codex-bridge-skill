@@ -3,7 +3,8 @@
 These explicit registrations are development candidates for the existing
 Responses adapter. They are packaged source assets, never automatically copied
 into the installed registry, activated by installation, or advertised as Desktop
-acceptance. Runtime implementation remains alpha.122.
+acceptance. The registrations retain their alpha.122 endpoint contracts;
+development source alpha.123 updates the probe/evaluation tools described below.
 
 | Candidate | Official Responses base | Key environment variable | Effort |
 | --- | --- | --- | --- |
@@ -109,3 +110,19 @@ candidate loopback checks. Package inventory and syntax audit passed with 107
 plugin files. Tool-error recovery, command-exit stop, patch preview, cancellation,
 full AdditionalTools live coverage and Desktop acceptance still need separate
 current evidence. No online registration, global entry or default model changed.
+
+## Alpha.123 follow-up diagnostic (2026-09-09)
+
+After the owner requested repairs, one separately reserved DeepSeek CLI workspace
+case ran with the new evaluator and the unchanged endpoint contract. It passed:
+four client requests, four upstream dispatches/header responses, no budget
+rejection, exact file bytes and exact final answer. The validated JSON snapshots
+contained one custom call in each of rounds 1–3 and a message with no call in
+round 4; round 2 also contained a message. No output text or call identity was
+retained by the new diagnostic summary.
+
+This single observation did not reproduce the former fifth request. It does
+not establish its root cause or prove that plugin isolation fixed model stopping
+behavior. The alpha.122 failure stays failed; it is not overwritten or folded
+into the fourteen-case historical total. Unicode/CRLF failures were not rerun or
+reclassified. Full current CLI and Desktop acceptance remain incomplete.

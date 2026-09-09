@@ -1,5 +1,46 @@
 # Responses registration and acceptance
 
+## Alpha.123: exact probe results and bounded CLI diagnostics
+
+Synthetic probe success now requires the final verification string to match
+exactly. `verification_after_trim` remains diagnostic only. Space, LF, CRLF,
+tab and nonbreaking-space wrappers fail without repair or a third request.
+New completed probe receipts include `checked_at`, `cli_version: "none"`,
+`synthetic_only`, and contract/adapter/evaluator SHA-256 bindings. The evaluator
+digest covers profiles, CLI evaluation and the probe implementation. Profile
+import checks it for every report, including non-CLI cases. All existing probe
+case names can be retained in profiles, but none satisfies a required CLI gate.
+
+The no-replay receipt filename and initial `may_have_started_no_retry` record
+are unchanged. Incomplete reservations never become evidence. Old receipts are
+not backfilled or reclassified; prior evaluator digests remain stale. These
+bindings detect version mismatch, not model identity attestation or tampering by
+an actor able to rewrite both the report and its self-reported digests.
+
+The disposable CLI evaluator retains `requests` as client attempts and adds
+explicit client/admitted/budget-rejected counts, upstream dispatch attempts, and
+upstream header-response counts. Dispatch means entering the single HTTP proxy
+attempt, not proven provider receipt or successful execution. Each admitted
+round may retain a fixed JSON snapshot type-count summary after validation;
+the summary contains no text, tool names, call IDs, arguments, URLs or keys.
+Its scope is snapshot validation, not event/call release. Native upstream SSE
+is not reread: its `json_snapshot` is null. No new business-route logging or
+diagnostic endpoint is installed, and no additional HTTP request is made.
+
+The existing extra-round CLI fixture now uses JSON upstream and checks that
+an extra client request is refused before upstream dispatch, while preserving
+the prior call's type counts. Request caps, exact file checks, stop rules and
+historical failures remain unchanged. A new live diagnostic run is separate
+evidence; these isolated changes do not resolve a prior model failure by themselves.
+
+Disposable CLI configuration now disables `features.plugins` and
+`features.remote_plugin`, confirmed by the installed official CLI 0.153.4
+feature listing. The fixture's explicitly configured MCP server remains enabled.
+This prevents unrelated plugin discovery/downloads in the isolated home; it does
+not disable Desktop plugins or qualify their live integration. The exec CLI
+regression stops its exact child before temporary-home cleanup on a timeout.
+The original full-suite timeout and Windows file-lock failure remain recorded.
+
 Version-prefixed sections and dated trial results below retain their original
 scope. They are historical observations, not a statement that the current source
 is installed or that every model/version passed Desktop acceptance. Current

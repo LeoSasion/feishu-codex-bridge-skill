@@ -4,6 +4,11 @@ Official DeepSeek and GLM development candidates and their explicit endpoint
 contracts are documented in [official online models](official-online-models.md).
 These source assets do not activate routing or transfer historical acceptance.
 
+Alpha.123 updates [probe evidence and CLI diagnostics](responses-acceptance.md#alpha123-exact-probe-results-and-bounded-cli-diagnostics)
+without changing production routing. Probe success requires exact final text;
+new receipts bind the combined evaluator revision, and CLI diagnostics separate
+client attempts from upstream dispatch with fixed JSON output-type counts.
+
 ## Reasoning content validation (alpha.121)
 
 Adapted reasoning items retain the distinction between absent `content`,

@@ -10,7 +10,7 @@ import re
 from .model_registry import ModelRegistry, RouterError
 from .responses_tool_adapter import dumps, prepare_request
 
-CHECKS = frozenset({"json", "sse", "required", "named", "unicode", "long",
+CHECKS = frozenset({"json", "sse", "required", "named", "structured", "unicode", "unicode-json", "long", "long-lines",
                     "cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
                     "cli_patchplan", "cli_workspace", "cli_cancel"})
 CORE_CHECKS = frozenset({"cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
@@ -46,7 +46,8 @@ def adapter_digest():
 
 def evaluator_digest():
     digest = hashlib.sha256()
-    for path in (Path(__file__), Path(__file__).parent.parent / "operator_responses_eval.py"):
+    for path in (Path(__file__), Path(__file__).parent.parent / "operator_responses_eval.py",
+                 Path(__file__).parent.parent / "operator_responses_probe.py"):
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -67,7 +68,7 @@ def profile_from_reports(profile_id, row, reports):
                 or report.get("contract_sha256") != contract_digest(row)
                 or report.get("adapter_sha256") != adapter_digest()):
             raise RouterError("evaluation_report_contract_or_adapter_mismatch")
-        if str(report.get("case", "")).startswith("cli_") and report.get("evaluator_sha256") != evaluator_digest():
+        if report.get("evaluator_sha256") != evaluator_digest():
             raise RouterError("evaluation_report_evaluator_mismatch")
         check = {key: report.get(key) for key in ("case", "status", "checked_at", "cli_version")}
         if "final_text_policy" in report:

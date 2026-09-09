@@ -8,6 +8,7 @@ import unittest
 
 from test_responses_tools import ROUTE, response
 from operator_responses_probe import probe, probe_input, probe_usage, reserve_receipt
+from operator_core.responses_profiles import profile_from_reports, inspect_profile
 
 try:
     from aiohttp import web
@@ -36,7 +37,7 @@ class ProbeReceiptTests(unittest.TestCase):
 
 @unittest.skipUnless(web, "optional aiohttp environment required")
 class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
-    async def exercise(self, change_source=False, reject=False, case="json", registration=None):
+    async def exercise(self, change_source=False, reject=False, case="json", registration=None, whitespace=""):
         seen = []
 
         async def upstream(request):
@@ -61,7 +62,8 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
             verification = json.loads(result)["verification"]
             return web.json_response(response({
                 "type": "message", "id": "msg_probe", "status": "completed", "role": "assistant",
-                "content": [{"type": "output_text", "text": verification, "annotations": []}]}))
+                "content": [{"type": "output_text", "text": whitespace + verification + whitespace,
+                             "annotations": []}]}))
 
         app = web.Application()
         app.router.add_post("/v1/responses", upstream)
@@ -73,11 +75,20 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
             if registration is None:
                 row["responses"]["structured_tool_outputs"] = True
             report = await probe(row, case)
+            profile = profile_from_reports("synthetic-probe", row, [report])
+            self.assertEqual(profile["checks"][0]["status"], report["status"])
+            self.assertEqual(profile["checks"][0]["cli_version"], "none")
+            self.assertFalse(inspect_profile(profile)["isolated_cli_verified"])
             self.assertFalse(report["execution_performed"])
             self.assertEqual(report["requests"], len(seen))
             if change_source or reject:
                 self.assertEqual(report["status"], "failed")
                 self.assertEqual(len(seen), 1)
+            elif whitespace:
+                self.assertEqual(report["status"], "failed")
+                self.assertEqual(len(seen), 2)
+                self.assertFalse(report["verification_exact"])
+                self.assertTrue(report["verification_after_trim"])
             else:
                 self.assertEqual(report["status"], "passed")
                 self.assertEqual(len(seen), 2)
@@ -97,6 +108,11 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_model_source_change_never_continues(self):
         await self.exercise(change_source=True)
+
+    async def test_final_whitespace_is_diagnostic_only_and_never_passes(self):
+        for whitespace in (" ", "\n", "\r\n", "\t", "\u00a0"):
+            with self.subTest(whitespace=repr(whitespace)):
+                await self.exercise(whitespace=whitespace)
 
     async def test_rejection_never_retries(self):
         await self.exercise(reject=True)
