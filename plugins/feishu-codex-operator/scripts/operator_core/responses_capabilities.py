@@ -16,6 +16,8 @@ class UpstreamProtocolError(RouterError):
 
 PROTOCOL_REASONS = frozenset({
     "invalid_protocol_json", "invalid_protocol_string", "invalid_protocol_unicode",
+    "invalid_json_event_content",
+    "invalid_reasoning_content", "unfinished_reasoning_item",
     "protocol_string_too_large", "opaque_upstream_context_not_supported",
     "invalid_output_message", "unsupported_structured_content", "invalid_content_part",
     "unsupported_input_modality", "image_url_required", "invalid_response_item",
@@ -23,6 +25,7 @@ PROTOCOL_REASONS = frozenset({
     "unfinished_tool_call", "function_arguments_must_be_object", "custom_wrapper_requires_exact_input",
     "unsuccessful_or_invalid_response", "duplicate_output_item_id", "duplicate_output_call_id",
     "upstream_violated_tool_choice", "invalid_initial_response", "response_id_changed",
+    "completed_response_without_message_or_tool",
     "response_created_missing", "duplicate_response_created", "invalid_or_duplicate_output_index",
     "unsupported_output_item", "duplicate_item_id", "unknown_output_index", "mismatched_event_item_id",
     "unexpected_arguments_event", "conflicting_arguments_events", "arguments_done_mismatch",
@@ -94,12 +97,16 @@ class ResponsesCapabilities:
     text_tool_outputs: str = "native"
     history_custom_tools: tuple[tuple[str, str], ...] = ()
     named_function_outputs: tuple[tuple[str, str], ...] = ()
+    input_tool_definitions: str = "reject"
+    upstream_response_mode: str = "match_client"
+    completed_output_policy: str = "allow_empty"
 
     @classmethod
     def parse(cls, value):
         fields = set(cls.__dataclass_fields__)
         optional = {"tool_choice_by_reasoning", "text_tool_outputs", "history_custom_tools",
-                    "named_function_outputs"}
+                    "named_function_outputs", "input_tool_definitions", "upstream_response_mode",
+                    "completed_output_policy"}
         if (not isinstance(value, dict) or set(value) - fields
                 or fields - optional - set(value)):
             raise RouterError("invalid_responses_capability_fields")
@@ -139,6 +146,17 @@ class ResponsesCapabilities:
             raise RouterError("invalid_text_tool_output_mode")
         if text_outputs == "json_string" and value["structured_tool_outputs"]:
             raise RouterError("conflicting_tool_output_capabilities")
+        input_definitions = value.get("input_tool_definitions", "reject")
+        if (not isinstance(input_definitions, str)
+                or input_definitions not in {"reject", "additional_tools_v1"}):
+            raise RouterError("invalid_input_tool_definitions_capability")
+        response_mode = value.get("upstream_response_mode", "match_client")
+        if not isinstance(response_mode, str) or response_mode not in {"match_client", "json"}:
+            raise RouterError("invalid_upstream_response_mode")
+        completed_policy = value.get("completed_output_policy", "allow_empty")
+        if (not isinstance(completed_policy, str)
+                or completed_policy not in {"allow_empty", "require_message_or_tool"}):
+            raise RouterError("invalid_completed_output_policy")
         restrictions = value.get("tool_choice_by_reasoning", {})
         if (not isinstance(restrictions, dict) or any(not isinstance(key, str) or key not in {
                 "unspecified", "none", "minimal", "low", "medium", "high", "xhigh", "max"}
@@ -167,7 +185,10 @@ class ResponsesCapabilities:
                       "tool_choice": choices, "input_modalities": modalities,
                       "tool_choice_by_reasoning": restrictions, "text_tool_outputs": text_outputs,
                       "history_custom_tools": tuple(sorted(history_tools.items())),
-                      "named_function_outputs": tuple(sorted(named_outputs.items()))})
+                      "named_function_outputs": tuple(sorted(named_outputs.items())),
+                      "input_tool_definitions": input_definitions,
+                      "upstream_response_mode": response_mode,
+                      "completed_output_policy": completed_policy})
 
     def custom_mode(self, name, namespace=None):
         return dict(self.custom_tools).get((namespace + "." if namespace else "") + name)

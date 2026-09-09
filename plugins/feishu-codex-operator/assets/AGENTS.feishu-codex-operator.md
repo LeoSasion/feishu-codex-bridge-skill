@@ -47,6 +47,23 @@
   required before global activation; isolated tests alone are insufficient.
   Registry v2 may explicitly adapt external Responses tools using per-endpoint
   capabilities. Preserve v1/null passthrough, native traffic and local Beeper.
+  An explicit upstream_response_mode=json endpoint contract may select one
+  non-streaming upstream request before dispatch and serialize its fully validated
+  successful JSON response as downstream SSE/WebSocket. Preserve exact text and
+  tool identities, bounded reads, cancellation and rejection before call release.
+  This buffers generation; never repair an observed stream, retry a failed request,
+  infer the mode from a model name or present it as first-token timing.
+  Before emitting JSON-derived events, validate each serialized event JSON against
+  16 MiB and their combined UTF-8 bytes against 64 MiB, including repeated snapshots
+  and metadata, using actual sequence numbers. Transport framing is outside this
+  JSON-byte count. Reject before any event or call release; never truncate to fit.
+  Text parts use the event bound; tool arguments retain their separate 2 MiB bound.
+  An explicit completed_output_policy=require_message_or_tool endpoint contract
+  may reject completed outputs lacking a validated call or nonempty assistant
+  text/refusal. Preserve the allow_empty default, all text bytes and native/v1/null
+  passthrough. Reasoning-only output never supplies a call or answer; this check
+  cannot prove semantic correctness, effective reasoning settings or Desktop
+  acceptance, and never triggers repair or retry.
   The adapter only converts protocol data; Desktop retains tool execution and
   permissions. Preserve tool source and call identities; reject unknown tools,
   unsupported grammar, opaque history and incomplete calls without repair or
@@ -57,6 +74,11 @@
   failures separately and together, distinguishing failed, missing and stale gates.
   Content parts follow their owning message or reasoning item; reasoning_text
   parts remain distinct from output_text and refusal, with no content conversion.
+  Preserve absent/null/empty reasoning content distinctly. Validate textual reasoning
+  collections in explicit history and terminal output before dispatch or call release;
+  reject malformed collections and explicit unfinished status without repair or retry.
+  A null snapshot cannot erase observed streamed text. Legacy reasoning text stays
+  its original representation and never supplies an answer or an inferred call.
   New isolated CLI cases may explicitly select marker_line_v1 for bounded LF/CRLF
   lines around the synthetic report only. Preserve raw text, exact comparison,
   tool/file checks and per-case policy; never reclassify old failures or infer
@@ -73,6 +95,15 @@
   never flatten images or drop content. Reasoning-specific tool-choice profiles
   are checked before sending. Parallel permission may be narrowed to a supported
   single call, never widened beyond the caller's constraint.
+  An explicitly selected additional_tools_v1 input codec may compile the dated
+  Codex developer AdditionalTools envelope into the same request tool map.
+  Retain its complete source object and input index in request memory; never
+  parse ordinary message text into declarations, synthesize a privileged prompt,
+  infer custom-tool registrations or bypass deferred loading and tool choice.
+  Paired result identities must match their original calls before alias mapping.
+  Unfinished historical calls and unsuccessful tool-search outputs are rejected;
+  they never enable tools or cause retries. This codec is not a general Responses
+  Lite implementation or hosted-search executor; native/v1/null routes stay opaque.
   Synthetic provider probes and isolated CLI execution are distinct evidence;
   neither satisfies live Desktop/global-entry acceptance by itself.
   Desktop verification is a separate read-only review of private dated evidence.
@@ -355,9 +386,25 @@
 - Focused tests may run only while the exact Operator is verified stopped and no
   callback request is pending. Tests must use isolated temporary state and
   must not contact a live Feishu chat or Codex task.
+  Select suites by the changed behavior using the canonical tests/README.md.
+  Run full regression for cross-layer changes and before release/deployment;
+  prose-only edits need the package audit, not CLI execution. Prefer behavioral
+  boundary checks over repeated prose or source-spelling assertions. Keep private
+  archives outside test discovery and retain historical failures as evidence.
 
 ### Change and publication discipline
 
+- The Desktop search bridge direction is paused. Retain
+  `references/retained-desktop-search-idea.md` under the canonical plugin,
+  including its concise architecture flow and the README acknowledgment, until
+  the owner explicitly requests their deletion. The owner authorized cleanup of
+  the obsolete private ChatGPT Web draft code and patch on 2026-09-09; those
+  snapshots need not be retained. Routine cleanup, upgrades or refactoring must
+  not remove this idea or automatically resume its development, configuration
+  or deployment.
+  The owner's later 2026-09-09 request resumes ordinary tool protocol adaptation
+  with CC Switch as a reference. This does not delete the retained search design
+  or automatically enable its hosted-search replacement and MCP bridge draft.
 - Keep source, installed-runtime inventory, MCP schema, rules mirror, tests, and
   documentation synchronized in one change. The managed block in this file and
   `assets/AGENTS.feishu-codex-operator.md` must remain byte-identical.

@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -58,27 +59,33 @@ class InstallUpgradeTests(unittest.TestCase):
                 self.assertEqual(set(manifest['code_files']), set(startup_files),
                                  'The startup guard must accept exactly the installed inventory')
                 self.assertIn("operator_core/runtime.py", manifest["code_files"])
-                for relative in (
-                    "routing_cli.py",
-                    "operator_core/__init__.py",
-                    "operator_core/final_callback.py",
-                    "operator_core/beeper_provider.py",
-                    "operator_core/beeper_model_catalog.json",
-                    "operator_core/responses_capabilities.py",
-                    "operator_core/responses_tool_adapter.py",
-                    "operator_core/responses_events.py",
-                    "operator_core/lmstudio_discovery.py",
-                    "operator_core/responses_verification.py",
-                    "operator_core/responses_labels.py",
-                    "operator_responses_probe.py",
-                ):
+                for relative, digest in manifest["code_files"].items():
                     self.assertEqual(
                         hashlib.sha256((runtime / relative).read_bytes()).hexdigest(),
-                        manifest["code_files"][relative],
+                        digest,
                     )
-                self.assertIn("from operator_core import main", (runtime / "operator_main.py").read_text())
                 self.assertFalse((runtime / "operator.pid").exists())
             self.assertTrue((runtime / "backups").is_dir())
+            # Test the installed status output, not spelling in its PowerShell source.
+            public_rate = {
+                "status": "cached", "limit_id": "fixture-limit", "remaining_percent": 80,
+                "window_duration_minutes": 300, "reset_at": 2000000000,
+                "beeper_model": "gpt-5.6-luna", "beeper_reasoning_effort": "low",
+                "beeper_limit_id": None, "beeper_remaining_percent": None,
+                "beeper_window_duration_minutes": None, "beeper_reset_at": None,
+            }
+            health = {
+                "status": "stopped", "operator_version": manifest["operator_version"],
+                "session_owner": "responder", "responder_writer": "beeper-task-send",
+                "responder_transport": "beeper-relay", "responder_status_observer": "app-server-metadata-readonly",
+                "catalog_transport": "app-server-readonly", "event_consumer": False, "pid": os.getpid(),
+                "beeper_wake_signal": {"lease_active": False, "lease_seconds": 1800, "fallback_delay_seconds": 30},
+                "active_turns": 0, "unknown_status_timeout_seconds": 300, "callback_grace_seconds": 20,
+                "callback_queue": {"pending": 0}, "started_at": time.time(), "updated_at": time.time(),
+                "account_rate_limits": {**public_rate, "account_id": "private-fixture-value",
+                                        "unexpected_data": "private-fixture-value"},
+            }
+            (runtime / "health.json").write_text(json.dumps(health), encoding="utf-8")
             status = subprocess.run(
                 [PWSH, "-NoProfile", "-File",
                  str(ROOT / "scripts" / "feishu-codex-operator.ps1"),
@@ -89,6 +96,13 @@ class InstallUpgradeTests(unittest.TestCase):
             report = json.loads(status.stdout)
             self.assertTrue(report["installed_manifest"]["valid"], report)
             self.assertFalse(report["runtime"]["running"], report)
+            snapshot = report["health_snapshot"]
+            self.assertTrue(snapshot["valid"], report)
+            self.assertEqual(snapshot["account_rate_limits"], public_rate)
+            self.assertEqual(snapshot["beeper_wake_signal"], health["beeper_wake_signal"])
+            for key in ("unknown_status_timeout_seconds", "callback_grace_seconds", "responder_status_observer"):
+                self.assertEqual(snapshot[key], health[key])
+            self.assertNotIn("private-fixture-value", status.stdout)
             for name, value in preserved.items():
                 self.assertEqual(value, (runtime / name).read_bytes(), name)
 

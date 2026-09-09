@@ -1,5 +1,11 @@
 # Responses registration and acceptance
 
+Version-prefixed sections and dated trial results below retain their original
+scope. They are historical observations, not a statement that the current source
+is installed or that every model/version passed Desktop acceptance. Current
+source validation is recorded in [release audit](release-audit.md); recorded
+Desktop gates still require matching model, contract and implementation versions.
+
 ## Alpha.109: text consistency and readable evidence status
 
 The adapted SSE lane now compares observed UTF-8 text in message, refusal,
@@ -43,8 +49,13 @@ See [LM Studio prompt templates](https://lmstudio.ai/docs/app/advanced/prompt-te
 current evidence. It reads the row directly from the registry, not from an old
 profile or a saved verdict. `--apply` is a separate explicit mutation: reserve
 the configured inactive router port, require the owned entry deactivated, verify
-Desktop, the installed router process and the exact Operator stopped, and require
-empty callback state. This prevents selecting a different unused port to bypass
+the installed router process and the exact Operator stopped, and require empty
+callback state. Alpha.122 removes the extra `desktop_running` rejection that
+remained through alpha.121. Desktop may stay open for preview and apply; its
+installed package version must still match the supplied evidence binding.
+This aligns label changes with the existing registry policy and does not remove
+Operator/router lifecycle checks or imply live Desktop catalog refresh.
+The configured-port reservation prevents selecting a different unused port to bypass
 the running router check. It also
 checks the installed Desktop package version against the supplied version.
 
@@ -89,8 +100,8 @@ reads it without inference, service control, registry writes or permission chang
 A current isolated CLI profile plus all eight current Desktop gates permits the
 report to recommend `[verified]`. This is local recorded-case verification, not
 Codex certification or global routing readiness. The dropdown is not modified by
-this read-only command; a future guarded stopped catalog update must re-evaluate
-current evidence before using its recommendation. Startup discovery still labels
+this read-only command; the separately implemented `verification-label` update
+must re-evaluate current evidence before using its recommendation. Startup discovery still labels
 new models unverified.
 
 ```text
@@ -706,8 +717,9 @@ New rows are labelled unverified; registration never transfers another model's
 receipts or starts an acceptance task. Read-only preview found the existing
 Qwen3.6 route, one new Qwen3.8 route and one excluded embedding model. Both chat
 models reported exact loaded instances with 262144-token contexts at that time.
-Applying the batch and verifying the next Desktop dropdown remain pending until
-the separately prepared startup entry completes its guarded stopped cutover.
+At that preview stage, applying the batch and checking the next Desktop dropdown
+were still pending. The following 2026-09-08 record documents their completion
+for that specific startup trial; it does not supply current-version acceptance.
 
 ## Completed alpha.106 startup and Qwen3.8 picker confirmation
 

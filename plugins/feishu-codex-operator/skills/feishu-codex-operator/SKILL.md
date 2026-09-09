@@ -57,7 +57,8 @@ description: Configure, install, diagnose, and develop Feishu Codex Operator, th
 
 ## 开发与验证
 
-精确服务已停止、无 pending callback 后，使用 README 的隔离单元测试与发布审核命令。
+精确服务已停止、无 pending callback 后，按 [测试维护](../../tests/README.md) 选择受影响模块。
+跨层改动和发布/部署前运行全量；纯文档措辞改动执行发布审计，不重复启动 CLI 执行用例。
 测试和诊断不发真实消息；真实 E2E 按当前 AGENTS 授权核对目标与身份。
 
 同步源码、安装清单、MCP、测试、文档和规则镜像。根 `AGENTS.md` 与

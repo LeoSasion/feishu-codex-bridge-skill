@@ -8,14 +8,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from operator_core.config import OPERATOR_VERSION, load_config  # noqa: E402
+from operator_core.config import load_config  # noqa: E402
 
 
 class ConfigTests(unittest.TestCase):
     def test_minimal_relay_defaults(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = load_config()
-        self.assertEqual("4.2.0-alpha.116", OPERATOR_VERSION)
         self.assertEqual(300, config.unknown_status_timeout_seconds)
         self.assertEqual(20, config.callback_grace_seconds)
         self.assertEqual(168, config.callback_retention_hours)
@@ -115,47 +114,6 @@ class ConfigTests(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 load_config()
-
-    def test_new_runtime_modules_are_in_every_runtime_integrity_surface(self) -> None:
-        surfaces = (
-            ROOT / "scripts" / "install-feishu-codex-operator.ps1",
-            ROOT / "scripts" / "start-feishu-codex-operator.ps1",
-            ROOT / "scripts" / "feishu-codex-operator.ps1",
-        )
-        for surface in surfaces:
-            with self.subTest(surface=surface.name):
-                text = surface.read_text(encoding="utf-8")
-                normalized = text.replace("\\", "/")
-                self.assertIn("operator_core/rate_limits.py", normalized)
-                self.assertIn("operator_core/responder_observer.py", normalized)
-                self.assertIn("operator_core/beeper_provider.py", normalized)
-                self.assertIn("operator_core/beeper_model_catalog.json", normalized)
-                self.assertIn("operator_core/responses_verification.py", normalized)
-                self.assertIn("operator_core/responses_labels.py", normalized)
-
-    def test_status_exposes_only_the_sanitized_rate_limit_summary(self) -> None:
-        text = (ROOT / "scripts" / "feishu-codex-operator.ps1").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("account_rate_limits = [ordered]@{", text)
-        self.assertIn("remaining_percent = if", text)
-        self.assertIn("beeper_model = if", text)
-        self.assertIn("beeper_reasoning_effort = if", text)
-        self.assertIn("$beeperPolicyValid", text)
-        self.assertIn("'gpt-5.3-codex-spark'", text)
-        self.assertIn("'gpt-5.6-luna'", text)
-        self.assertIn("'beeper'", text)
-        self.assertIn("$beeperReasoningEffort -ceq 'low'", text)
-        self.assertIn("$beeperReasoningEffort -in @('low', 'medium', 'high')", text)
-        self.assertIn("unknown_status_timeout_seconds", text)
-        self.assertIn("callback_grace_seconds", text)
-        self.assertIn("responder_status_observer", text)
-        self.assertIn("beeper_wake_signal = [ordered]@{", text)
-        self.assertIn("lease_seconds", text)
-        self.assertIn("fallback_delay_seconds", text)
-        self.assertIn("window_duration_minutes = if", text)
-        self.assertNotIn("account_id =", text)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -126,7 +126,7 @@ class LabelTests(unittest.TestCase):
                 assert_stopped(self.state, self.fixture.versions['desktop_version'])
 
     @unittest.skipUnless(os.name == 'nt', 'Windows lifecycle observation')
-    def test_guard_requires_stopped_processes_matching_version_and_empty_callbacks(self):
+    def test_guard_allows_desktop_but_requires_stopped_services_version_and_empty_callbacks(self):
         runtime = self.state.parent
         (runtime / 'operator_main.py').write_text('# isolated fixture')
         with closing(sqlite3.connect(runtime / 'callbacks.sqlite3')) as db:
@@ -139,7 +139,8 @@ class LabelTests(unittest.TestCase):
                 assert_stopped(self.state, version)
         good = dict(desktop_running=0, operator_running=0, router_running=0, desktop_version=version)
         check(good)
-        for patch_value in ({'desktop_running': 1}, {'operator_running': 1}, {'router_running': 1},
+        check(good | {'desktop_running': 1})
+        for patch_value in ({'operator_running': 1}, {'router_running': 1},
                             {'desktop_version': 'changed'}, {'desktop_running': False}):
             with self.assertRaises(RouterError):
                 check(good | patch_value)

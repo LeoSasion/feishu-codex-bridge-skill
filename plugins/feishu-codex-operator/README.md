@@ -1,12 +1,17 @@
 # Feishu Codex Operator
 
-Source version: `4.2.0-alpha.116`. Operator（接线员）maps each Feishu private
+Plugin version: `1.1.0`; source runtime: `4.2.0-alpha.122`. Operator（接线员）maps each Feishu private
 chat, group, or topic to one existing Codex Desktop task.
 
 Local-model CLI evaluation supports explicit `--final-text-policy marker_line_v1`
 for bounded blank lines around synthetic final reports. Default exact checks and
 all raw model text, tool/file checks and historical failures remain preserved.
 See [acceptance rules](references/responses-acceptance.md#cross-model-final-report-compatibility-alpha110).
+
+Alpha.122 aligns verification-label updates with the existing registry policy:
+Desktop may remain open. The exact Operator/router must still be stopped,
+callbacks empty and current evidence, preview digest and backup checks satisfied.
+This does not refresh Desktop's model list or activate routing.
 
 ```text
 Feishu -> Operator inbox and exact task mapping
@@ -17,6 +22,29 @@ Desktop owns the Responder's context, model, tools, execution, and answer.
 Beeper forwards once; it owns no business result. Operator uses a Beeper
 wake-up signal (currently a Desktop deep link) only when needed. The existing
 30-minute `wake lease` and delayed wake-up fallback are unchanged.
+
+## 参考与致谢
+
+工具声明转换、保留原始身份并将调用交回当前 Codex 任务执行的设计，参考了
+[miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web)。
+感谢 miuuyy 分享这套思路，帮助我们解决工具调用方案设计中的难题。
+普通工具协议适配也参考了 [CC Switch](https://github.com/farion1231/cc-switch) 的
+工具上下文与 Responses 还原实现。2026-09-09 按所有者要求恢复普通工具研发，
+alpha.121 保留推理内容的合法空值，统一历史与完成响应的结构检查；异常历史不发上游，
+异常完成响应不释放工具。详见[推理项校验](references/model-router.md#reasoning-content-validation-alpha121)。
+alpha.120 在 JSON 转成 SSE/WebSocket 前检查每个事件及展开后的总大小，超限时不发出任何事件；
+同时修复长回复误用工具参数大小限制的问题。详见[事件大小检查](references/model-router.md#generated-event-bounds-alpha120)。
+alpha.119 增加显式的完成输出检查，识别只有思考内容、没有回复或工具调用的
+“完成”响应并返回固定诊断；不会把思考文本变成工具调用。详见[输出检查](references/model-router.md#completed-output-policy-alpha119)。
+alpha.118 增加按端点显式选择的完整 JSON 上游模式，可在严格验证完整响应后
+输出 SSE/WebSocket；用于流式快照不一致的端点，不会重试或修补失败的流。
+结果会在生成结束后一次出现，详见 [Gemma 兼容说明](references/model-router.md#gemma-and-complete-json-upstream-alpha118)。
+alpha.117 增加显式启用的 Codex developer `additional_tools` 输入声明转换；原始类型、
+namespace、call_id 与结果仍通过同一映射往返，执行和审批由 Desktop 负责。
+源码隔离测试覆盖 JSON/SSE/WebSocket 三轮往返，不代表已完成新一轮真实 Desktop 验收。
+配置和版本依据见 [工具协议说明](references/model-router.md#input-tool-declarations-alpha117)。
+新增 Desktop 搜索桥接方向已暂停，仅作为[保留思路](references/retained-desktop-search-idea.md)
+记录，未经所有者明确要求不得删除或自动恢复开发；该搜索能力尚未启用。
 
 ## Install and operate on Windows
 
@@ -86,9 +114,10 @@ string-only endpoints, reasoning-specific tool-choice checks, serial-call
 compatibility and incremental SSE line scanning. Registration never performs inference or activates Codex;
 the separate synthetic probe command requires an explicit model and receipt path.
 It has no LiteLLM dependency or Chat Completions conversion. Detached background
-start/status/stop and current CLI catalog loading are tested. Global activation,
-Windows login startup and live Desktop dropdown/task-default acceptance remain
-pending; the installer does not change the global entry point. Native
+start/status/stop and current CLI catalog loading are tested. General global
+readiness, Windows login startup and current model/version-specific Desktop
+acceptance remain open. The dated picker trials below establish only their
+recorded scope; the installer does not activate the global request-routing entry. Native
 catalog rows are preserved and Spark/Luna are never sent to external providers.
 In the owner's controlled alpha.106 startup trial, the runtime upgrade and
 one-model LM Studio batch append completed; Qwen3.8 appeared in Desktop's
@@ -141,6 +170,10 @@ Use `operator status -Json`, `operator doctor -Json`, and
 `operator readiness -Json` for read-only diagnostics.
 
 ## Validation
+
+Use [the test maintenance guide](tests/README.md) to choose the affected modules.
+Run the full suite for cross-layer changes and before release/deployment; prose-only
+edits need the package audit rather than CLI execution. Keep explicit CLI skips visible.
 
 Only while the exact service is stopped and no callback is pending:
 

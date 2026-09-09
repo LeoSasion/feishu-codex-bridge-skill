@@ -80,8 +80,8 @@ def assert_stopped(state, desktop_version):
             or any(type(observed[k]) is not int or observed[k] < 0
                    for k in ('desktop_running', 'operator_running', 'router_running'))):
         raise RouterError('label_lifecycle_observation_failed')
-    if observed['desktop_running'] or observed['operator_running'] or observed['router_running']:
-        raise RouterError('desktop_operator_and_router_must_be_stopped_for_label_update')
+    if observed['operator_running'] or observed['router_running']:
+        raise RouterError('operator_and_router_must_be_stopped_for_label_update')
     if observed['desktop_version'] != desktop_version:
         raise RouterError('desktop_version_changed_before_label_update')
     db = runtime / 'callbacks.sqlite3'
@@ -133,8 +133,8 @@ def _evaluate(raw, row, ledger, profile_path, versions):
 def label_update(state, slug, ledger, profile_path, versions, *, apply=False, expected_sha256=None):
     """Caller reserves the inactive router port for the entire apply operation.
 
-    Preview is read-only and may run with Desktop open. Apply additionally
-    checks stopped lifecycle twice and exclusively locks the registry. Versions
+    Desktop may remain open for preview and apply. Apply additionally checks
+    stopped Operator/router lifecycle twice and exclusively locks the registry. Versions
     and model digest must still be independently measured by the caller.
     """
     state = Path(state).absolute()

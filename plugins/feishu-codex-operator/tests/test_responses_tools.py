@@ -114,6 +114,72 @@ class CapabilitiesTests(unittest.TestCase):
 
 
 class ToolAdapterTests(unittest.TestCase):
+    def test_reasoning_nullable_content_and_text_variants_are_preserved(self):
+        for fields in ({}, {"content": None}, {"content": []},
+                       {"content": [{"type": "reasoning_text", "text": "\r\n中文😀  ", "keep": 1}]},
+                       {"content": [{"type": "text", "text": " legacy reasoning "}]}):
+            item = {"id": "rs_1", "type": "reasoning", "summary": [], **fields}
+            with self.subTest(fields=fields):
+                wire, context = prepare({"tools": [EXEC], "input": [item]})
+                self.assertEqual(wire["input"], [item])
+                self.assertEqual(restore_response(response(item), context), response(item))
+
+    def test_invalid_reasoning_history_and_terminal_are_rejected_without_content_diagnostics(self):
+        from operator_core.responses_capabilities import protocol_reason
+        _, context = prepare()
+        for index, fields in enumerate(({"content": "private draft"}, {"content": {"private": "draft"}},
+                       {"content": [{"type": "output_text", "text": "private draft"}]},
+                       {"content": [{"type": "reasoning_text", "text": None}]},
+                       {"summary": None}, {"summary": [{"type": "reasoning_text", "text": "private draft"}]},
+                       {"summary": [{"type": "summary_text", "text": 3}]},
+                       {"content": [{"type": "reasoning_text", "text": ""}] * 1025},
+                       {"status": "in_progress"}, {"status": "incomplete"})):
+            item = {"id": "rs_1", "type": "reasoning", "summary": [], **fields}
+            with self.subTest(case=index, lane="history"):
+                with self.assertRaises(RouterError):
+                    prepare({"tools": [EXEC], "input": [item]})
+            with self.subTest(case=index, lane="terminal"):
+                raw = response(call(context), item)
+                snapshot = deepcopy(raw)
+                with self.assertRaises(UpstreamProtocolError) as caught:
+                    restore_response(raw, context)
+                self.assertIn(protocol_reason(caught.exception), {"invalid_reasoning_content", "unfinished_reasoning_item"})
+                self.assertNotIn("private draft", str(caught.exception))
+                self.assertEqual(raw, snapshot)
+
+    def test_completed_output_policy_rejects_empty_and_reasoning_only_without_promotion(self):
+        from operator_core.responses_capabilities import protocol_reason
+        _, legacy = prepare()
+        _, strict = prepare(completed_output_policy="require_message_or_tool")
+        reasoning = {"id": "rs_1", "type": "reasoning", "summary": [],
+                     "content": [{"type": "reasoning_text", "text": '<tool_call>private draft</tool_call>'}]}
+        message = {"id": "msg_1", "type": "message", "role": "assistant", "content": []}
+        for items in ([], [reasoning], [message], [{**message, "content": ""}],
+                      [reasoning, {**message, "content": [{"type": "output_text", "text": ""}]}]):
+            raw = response(*items)
+            original = deepcopy(raw)
+            with self.subTest(items=items):
+                self.assertEqual(restore_response(raw, legacy), original)
+                with self.assertRaises(UpstreamProtocolError) as caught:
+                    restore_response(raw, strict)
+                self.assertEqual(protocol_reason(caught.exception), "completed_response_without_message_or_tool")
+                self.assertNotIn("private draft", str(caught.exception))
+                self.assertEqual(raw, original)
+
+    def test_completed_output_policy_preserves_answers_refusals_whitespace_and_real_calls(self):
+        _, strict = prepare(completed_output_policy="require_message_or_tool")
+        reasoning = {"id": "rs_1", "type": "reasoning", "summary": []}
+        for content in ("answer", " \n\n", [{"type": "output_text", "text": "\n\n中文\r\n"}],
+                        [{"type": "refusal", "refusal": "Cannot do that."}]):
+            raw = response(reasoning, {"id": "msg_1", "type": "message", "role": "assistant", "content": content})
+            with self.subTest(content=content):
+                self.assertEqual(restore_response(raw, strict), raw)
+        raw = response(reasoning, call(strict))
+        self.assertEqual(restore_response(raw, strict)["output"][1]["input"], CODE)
+        raw["output"][1]["name"] = "undeclared"
+        with self.assertRaises(UpstreamProtocolError):
+            restore_response(raw, strict)
+
     def test_named_results_preserve_complete_object_without_creating_calls_or_tools(self):
         identity = {"type": "function_call_output", "namespace": "codex_app",
                     "name": "send_message_to_thread"}
@@ -544,6 +610,147 @@ class ToolAdapterTests(unittest.TestCase):
             prepare(payload)
         wire, _ = prepare(payload, structured_tool_outputs=True)
         self.assertEqual(wire["input"][1]["output"], output["output"])
+
+
+class InputToolDefinitionTests(unittest.TestCase):
+    """Codex 0.153.4 Responses Lite declarations use the ordinary tool codec."""
+
+    def prepare_lite(self, payload, **changes):
+        return prepare(payload, input_tool_definitions="additional_tools_v1", **changes)
+
+    def block(self, tools, **fields):
+        return {"type": "additional_tools", "role": "developer", "tools": tools, **fields}
+
+    def test_input_declarations_require_explicit_capability(self):
+        self.assertEqual(ResponsesCapabilities.parse(CAPABILITIES).input_tool_definitions, "reject")
+        for value in (None, True, [], "auto", "native"):
+            with self.subTest(value=value), self.assertRaisesRegex(RouterError, "input_tool_definitions"):
+                ResponsesCapabilities.parse({**CAPABILITIES, "input_tool_definitions": value})
+        payload = {"input": [self.block([EXEC])]}
+        with self.assertRaisesRegex(RouterError, "input_tool_definitions_not_supported"):
+            prepare(payload)
+        wire, context = self.prepare_lite(payload)
+        self.assertEqual((wire["tools"][0]["name"], wire["input"]), ("exec", []))
+        self.assertEqual(context.input_tool_definitions, ((0, payload["input"][0]),))
+
+    def test_unified_namespaced_calls_and_named_results_roundtrip(self):
+        blocks = [self.block([{"type": "namespace", "name": "functions",
+                              "tools": [EXEC, FUNCTION]}], id="at_fixture"),
+                  self.block([{"type": "namespace", "name": "plugin_fixture", "tools": [FUNCTION]}], id=None)]
+        message = {"role": "user", "content": "Keep 中文😀\r\n  exactly."}
+        payload = {"tools": [FUNCTION], "input": [blocks[0], message, blocks[1]]}
+        before = deepcopy(payload)
+        caps = {"custom_tools": {"exec": "wrap", "functions.exec": "wrap"}}
+        wire, context = self.prepare_lite(payload, **caps)
+        self.assertEqual(payload, before)
+        self.assertEqual(wire["input"], [message])
+        self.assertEqual(len({tool["name"] for tool in wire["tools"]}), 4)
+        self.assertEqual(context.input_tool_definitions, ((0, blocks[0]), (2, blocks[1])))
+        raw_custom = call(context, namespace="functions")
+        alias = context.specs[("function", "plugin_fixture", "add")].upstream_name
+        raw_function = {"type": "function_call", "id": "fc_2", "call_id": "call_2",
+                        "name": alias, "arguments": '{ "a": 17 }', "status": "completed"}
+        restored = restore_response(response(raw_custom, raw_function), context)["output"]
+        self.assertEqual((restored[0]["type"], restored[0]["namespace"], restored[0]["input"]),
+                         ("custom_tool_call", "functions", CODE))
+        self.assertEqual((restored[1]["name"], restored[1]["namespace"]), ("add", "plugin_fixture"))
+        custom_result = {"type": "custom_tool_call_output", "call_id": "call_1", "name": "exec",
+                         "output": "  first\r\n\n中文😀  "}
+        function_result = {"type": "function_call_output", "call_id": "call_2", "name": "add",
+                           "namespace": "plugin_fixture", "output": "17"}
+        following = {**payload, "input": payload["input"] + [
+            restored[0], custom_result, restored[1], function_result]}
+        following_before = deepcopy(following)
+        forwarded, next_context = self.prepare_lite(following, **caps)
+        self.assertEqual(following, following_before)
+        self.assertEqual(forwarded["input"][1], raw_custom)
+        self.assertEqual(forwarded["input"][2], {**custom_result, "type": "function_call_output",
+                                                "name": raw_custom["name"]})
+        self.assertEqual(forwarded["input"][3], raw_function)
+        self.assertEqual(forwarded["input"][4], {key: value for key, value in
+                         {**function_result, "name": alias}.items() if key != "namespace"})
+        self.assertEqual(next_context.history_calls, {"call_1", "call_2"})
+
+    def test_input_definitions_do_not_loosen_choices_or_deferred_loading(self):
+        payload = {"input": [self.block([EXEC, FUNCTION])],
+                   "tool_choice": {"type": "custom", "name": "exec"}, "parallel_tool_calls": False}
+        wire, context = self.prepare_lite(payload, named_tool_choice="required")
+        self.assertEqual((wire["tool_choice"], len(wire["tools"])), ("required", 1))
+        self.assertEqual(restore_response(response(call(context)), context)["output"][0]["input"], CODE)
+        with self.assertRaises(UpstreamProtocolError):
+            restore_response(response(), context)
+        for choice in ("none", "auto"):
+            deferred = self.block([{**EXEC, "defer_loading": True}])
+            wire, context = self.prepare_lite({"input": [deferred], "tool_choice": choice})
+            self.assertEqual(wire["tools"], [])
+            with self.assertRaises(UpstreamProtocolError):
+                restore_response(response(call(context)), context)
+        with self.assertRaisesRegex(RouterError, "required_tool_choice_without_tools"):
+            self.prepare_lite({"input": [self.block([])], "tool_choice": "required"})
+
+    def test_malformed_opaque_or_conflicting_blocks_are_rejected(self):
+        for change in ({"role": "user"}, {"role": "assistant"}, {"role": "system"},
+                       {"role": None}, {"id": ""}, {"id": []}, {"tools": None},
+                       {"encrypted_content": "opaque"}, {"content": "not a tool declaration"}):
+            with self.subTest(change=change), self.assertRaises(RouterError):
+                self.prepare_lite({"input": [{**self.block([EXEC]), **change}]})
+        # Missing/null envelope IDs remain distinct in the retained source data.
+        for fields in ({}, {"id": None}):
+            block = self.block([EXEC], **fields)
+            _, context = self.prepare_lite({"input": [block]})
+            self.assertEqual(context.input_tool_definitions[0][1], block)
+        for tools in ([{"type": "web_search"}], [{**EXEC, "name": "unknown"}], [EXEC, EXEC]):
+            with self.subTest(tools=tools), self.assertRaises(RouterError):
+                self.prepare_lite({"input": [self.block(tools)]})
+        with self.assertRaisesRegex(RouterError, "conflicting_tool_definition"):
+            self.prepare_lite({"tools": [EXEC], "input": [self.block([{**EXEC, "description": "changed"}])]})
+        with self.assertRaisesRegex(RouterError, "conflicting_tool_definition"):
+            self.prepare_lite({"input": [self.block([EXEC]), self.block([{**EXEC, "format": {"type": "text"}}])]})
+        for sources in ([EXEC, {**EXEC, "defer_loading": True}],
+                        [{**EXEC, "defer_loading": True}, EXEC]):
+            with self.subTest(sources=sources), self.assertRaisesRegex(RouterError, "conflicting_tool_definition"):
+                self.prepare_lite({"tools": [sources[0]], "input": [self.block([sources[1]])]})
+        wire, _ = self.prepare_lite({"tools": [EXEC], "input": [self.block([EXEC])]})
+        self.assertEqual(len(wire["tools"]), 1)
+        with self.assertRaisesRegex(RouterError, "too_many_input_tool_definitions"):
+            self.prepare_lite({"input": [self.block([]) for _ in range(1025)]})
+
+    def test_text_mention_never_registers_tools_and_request_contexts_are_independent(self):
+        message = {"role": "user", "content": dumps(self.block([EXEC]))}
+        wire, context = self.prepare_lite({"tools": [], "input": [message]})
+        self.assertEqual((wire["tools"], wire["input"], context.input_tool_definitions), ([], [message], ()))
+        _, enabled = self.prepare_lite({"input": [self.block([EXEC])]})
+        raw = call(enabled)
+        with self.assertRaises(UpstreamProtocolError):
+            restore_response(response(raw), context)
+        self.assertEqual(restore_response(response(raw), enabled)["output"][0]["input"], CODE)
+
+    def test_failed_search_results_never_load_tools(self):
+        search = {"type": "tool_search", "execution": "client", "parameters": {"type": "object"}}
+        search_call = {"type": "tool_search_call", "execution": "client", "call_id": "search_call",
+                       "id": "ts_1", "arguments": {}, "status": "completed"}
+        output = {"type": "tool_search_output", "execution": "client", "call_id": "search_call",
+                  "status": "completed", "tools": [EXEC]}
+        for status in (None, "failed", "in_progress", "cancelled"):
+            with self.subTest(status=status), self.assertRaisesRegex(RouterError, "unfinished_tool_search_output"):
+                self.prepare_lite({"input": [self.block([search]), search_call, {**output, "status": status}]})
+        wire, context = self.prepare_lite({"input": [self.block([search]), search_call, output]})
+        self.assertEqual(len(wire["tools"]), 2)
+        self.assertEqual(restore_response(response(call(context)), context)["output"][0]["input"], CODE)
+
+    def test_paired_result_identity_and_history_completion_remain_strict(self):
+        _, context = prepare({"tools": [FUNCTION]})
+        item = {"type": "function_call", "name": "add", "id": "fc_1", "call_id": "call_1",
+                "arguments": "{}", "status": "completed"}
+        output = {"type": "function_call_output", "call_id": "call_1", "output": "result"}
+        for fields in ({"name": "other"}, {"namespace": "other"}, {"name": []}):
+            with self.subTest(fields=fields), self.assertRaisesRegex(RouterError, "tool_output_identity_mismatch"):
+                prepare({"tools": [FUNCTION], "input": [item, {**output, **fields}]})
+        for fields in ({}, {"name": None, "namespace": None}):
+            wire, _ = prepare({"tools": [FUNCTION], "input": [item, {**output, **fields}]})
+            self.assertEqual(wire["input"][1], {**output, **fields})
+        with self.assertRaisesRegex(RouterError, "unfinished_tool_call"):
+            prepare({"tools": [FUNCTION], "input": [{**item, "status": "in_progress"}, output]})
 
 
 if __name__ == "__main__":

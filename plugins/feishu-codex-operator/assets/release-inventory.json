@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release_name": "feishu-codex-operator-plugin",
-  "source_version": "4.2.0-alpha.116",
+  "source_version": "4.2.0-alpha.122",
   "repository_files": [
     ".agents/plugins/marketplace.json",
     ".gitignore",
@@ -56,6 +56,7 @@
         "scripts/model-router-requirements.txt",
         "references/model-router.md",
         "references/responses-tool-compatibility-plan.md",
+        "references/retained-desktop-search-idea.md",
         "tests/test_model_router.py",
         "tests/test_responses_tools.py",
         "tests/test_responses_events.py",
@@ -83,8 +84,8 @@
         "scripts/temporary_binding_transaction.py",
         "skills/feishu-codex-operator/SKILL.md",
         "skills/feishu-codex-operator/agents/openai.yaml",
-        "tests/test_agents_rules.py",
         "tests/test_app_server_catalog.py",
+        "tests/README.md",
         "tests/test_app_server.py",
         "tests/test_config.py",
         "tests/test_performance.py",

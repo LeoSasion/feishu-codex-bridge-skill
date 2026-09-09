@@ -14,16 +14,18 @@
   account-only quota read, or request-scoped lifecycle metadata; never a task owner.
 - **Catalog App Server**: the `/init` lane, limited to task identity and status
   without turns.
-- **Quota cache**: one process-wide account/Spark snapshot, refreshed adaptively
-  before dispatch to guard account use, observe Spark capacity, and check cadence.
+- **Quota cache**: one process-wide account/Spark snapshot refreshed on an adaptive
+  cadence. Ample known quota permits a background read; low/unknown quota or a
+  reached limit retains a pre-dispatch read.
 - **Lifecycle observer**: content-free, request-scoped reads of the exact
   Responder's lifecycle. Explicit running is unbounded, stable terminal state
   starts callback grace, and every ambiguity is unknown.
 - **Local Beeper model**: model/provider named `beeper`; a loopback-only
   deterministic Responses API installed with Operator and selected only by config.
-- **Beeper model fallback**: blank defaults to Luna/low. Explicit Spark may fall
-  back once to Luna only after an exhausted Spark bucket or proven quota rejection.
-  Local `beeper` and Luna never fall back.
+- **Beeper model fallback**: blank defaults to Luna/low. A fresh exhausted Spark
+  bucket selects Luna before any Spark queue attempt. A proven Spark queue quota
+  rejection permits one same-event Luna attempt. Local `beeper` and Luna never
+  fall back.
 - **Beeper reasoning diagnostic**: explicit Spark/low or Spark/high only; normal
   selection remains local `beeper`/low, Spark/medium, or Luna/low.
 - **Beeper prompt language**: Spark always uses English Operator instructions,
