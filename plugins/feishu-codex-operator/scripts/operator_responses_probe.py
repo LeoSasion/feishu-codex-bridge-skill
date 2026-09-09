@@ -17,11 +17,14 @@ from operator_core.responses_profiles import adapter_digest, contract_digest, ev
 from operator_core.responses_tool_adapter import EXEC_GRAMMAR, dumps, loads
 
 
-CASES = ("json", "sse", "required", "named", "structured", "unicode", "unicode-json", "long", "long-lines")
+CASES = ("json", "sse", "required", "named", "structured", "unicode", "unicode-json",
+         "unicode-json-lf", "unicode-arguments", "unicode-arguments-lf", "long", "long-lines")
 
 
 def probe_input(case):
-    if case in {"unicode", "unicode-json"}:
+    if case in {"unicode-json-lf", "unicode-arguments-lf"}:
+        return probe_input("unicode-json").replace("\r\n", "\n")
+    if case in {"unicode", "unicode-json", "unicode-arguments"}:
         return 'text("中文😀\\\\path\\"quote");\r\ntext("line\\nnext");'
     if case == "long":
         return "// " + ("bounded synthetic source " * 192) + "\ntext(17 + 25);"
@@ -29,6 +32,19 @@ def probe_input(case):
         return "\n".join("// synthetic line " + str(index).zfill(3) + ": preserve order and characters"
                          for index in range(96)) + "\ntext(17 + 25);"
     return "text(17 + 25);"
+
+
+def source_difference(expected, actual):
+    """Fixed counts and zero-based byte offset only; never retain source text."""
+    left, right = expected.encode("utf-8"), actual.encode("utf-8")
+    first = next((index for index, (a, b) in enumerate(zip(left, right)) if a != b),
+                 min(len(left), len(right)) if left != right else None)
+    result = {"first_different_utf8_byte": first}
+    for label, value in (("expected", expected), ("actual", actual)):
+        result.update({label + "_crlf_count": value.count("\r\n"),
+                       label + "_lf_count": value.count("\n"),
+                       label + "_backslash_count": value.count("\\")})
+    return result
 
 
 def probe_usage(value):
@@ -99,11 +115,19 @@ async def probe(row, case):
         prompt = ("Call exec exactly once with the following exact source, preserving whitespace "
                   "and characters. Do not compute the answer yourself. After the tool output arrives, "
                   "reply with only its verification value.\nSOURCE START\n" + code + "\nSOURCE END")
-        if case == "unicode-json":
+        if case in {"unicode-json", "unicode-json-lf"}:
+            newline = "LF" if case == "unicode-json-lf" else "CRLF"
             prompt = ("Call exec exactly once using the decoded value of the following JSON string "
-                      "as its raw source. Decode JSON escapes once, preserving CRLF, Unicode, "
+                      f"as its raw source. Decode JSON escapes once, preserving {newline}, Unicode, "
                       "quotes and backslashes. This representation makes invisible characters explicit. "
                       "After the tool output arrives, reply with only its verification value.\n" + dumps(code))
+        if case in {"unicode-arguments", "unicode-arguments-lf"}:
+            newline = "LF" if case == "unicode-arguments-lf" else "CRLF"
+            prompt = ("Call exec exactly once with the input field of this JSON object as its raw "
+                      "source. The object describes function arguments, not another wrapper to "
+                      f"put inside input. Preserve every source character, including {newline} and "
+                      "backslash escapes inside source-language strings. After the tool output "
+                      "arrives, reply with only its verification value.\n" + dumps({"input": code}))
         history = [{"role": "user", "content": prompt}]
         payload = {"model": row["slug"], "input": history, "tools": [tool],
                    "tool_choice": ({"type": "custom", "name": "exec"} if case == "named" else
@@ -153,6 +177,7 @@ async def probe(row, case):
             report["input_match_after_newline_normalization"] = (
                 calls[0].get("input", "").replace("\r\n", "\n") == code.replace("\r\n", "\n"))
             actual = calls[0].get("input", "")
+            report["source_difference"] = source_difference(code, actual)
             report["actual_input_bytes"] = len(actual.encode("utf-8"))
             report["input_contains_requested_source"] = code in actual
             report["input_is_markdown_wrapped"] = actual.lstrip().startswith("```")

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release_name": "feishu-codex-operator-plugin",
-  "source_version": "4.2.0-alpha.123",
+  "source_version": "4.2.0-alpha.124",
   "repository_files": [
     ".agents/plugins/marketplace.json",
     ".gitignore",

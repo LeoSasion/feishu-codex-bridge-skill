@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from test_responses_tools import ROUTE, response
-from operator_responses_probe import probe, probe_input, probe_usage, reserve_receipt
+from operator_responses_probe import probe, probe_input, probe_usage, reserve_receipt, source_difference
 from operator_core.responses_profiles import profile_from_reports, inspect_profile
 
 try:
@@ -18,6 +18,19 @@ except ImportError:
 
 
 class ProbeReceiptTests(unittest.TestCase):
+    def test_source_difference_reports_only_counts_and_exact_byte_offset(self):
+        for expected, actual, offset in (("中😀", "中😀", None), ("中😀", "中", 3),
+                                         ("中", "中😀", 3), ("a\r\n", "a\n", 1)):
+            with self.subTest(offset=offset):
+                report = source_difference(expected, actual)
+                self.assertEqual(report["first_different_utf8_byte"], offset)
+                self.assertTrue(all(type(v) is int or v is None for v in report.values()))
+        crlf = probe_input("unicode-json")
+        lf = probe_input("unicode-json-lf")
+        self.assertEqual(lf, crlf.replace("\r\n", "\n"))
+        self.assertEqual(len(crlf.encode()), 53)
+        self.assertEqual(len(lf.encode()), 52)
+
     def test_receipt_reserves_no_replay_boundary_before_a_result(self):
         with tempfile.TemporaryDirectory() as directory:
             target = reserve_receipt(Path(directory), ROUTE, "json", "synthetic-run")
@@ -37,7 +50,8 @@ class ProbeReceiptTests(unittest.TestCase):
 
 @unittest.skipUnless(web, "optional aiohttp environment required")
 class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
-    async def exercise(self, change_source=False, reject=False, case="json", registration=None, whitespace=""):
+    async def exercise(self, change_source=False, reject=False, case="json", registration=None, whitespace="",
+                       source_transform=None):
         seen = []
 
         async def upstream(request):
@@ -48,12 +62,18 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
             if len(seen) == 1:
                 if case == "named":
                     self.assertEqual(body["tool_choice"], {"type": "function", "name": "exec"})
-                if case == "unicode-json":
+                if case in {"unicode-json", "unicode-json-lf"}:
                     self.assertEqual(json.loads(body["input"][0]["content"].split("\n")[-1]), probe_input(case))
+                if case in {"unicode-arguments", "unicode-arguments-lf"}:
+                    self.assertEqual(json.loads(body["input"][0]["content"].split("\n")[-1]),
+                                     {"input": probe_input(case)})
+                source = "text(42);" if change_source else probe_input(case)
+                if source_transform:
+                    source = source_transform(source)
                 return web.json_response(response({
                     "type": "function_call", "id": "fc_probe", "call_id": "call_probe",
                     "status": "completed", "name": "exec", "arguments": json.dumps({
-                        "input": "text(42);" if change_source else probe_input(case)})}))
+                        "input": source})}))
             output = body["input"][-1]
             result = output["output"]
             if case == "structured":
@@ -81,7 +101,7 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(inspect_profile(profile)["isolated_cli_verified"])
             self.assertFalse(report["execution_performed"])
             self.assertEqual(report["requests"], len(seen))
-            if change_source or reject:
+            if change_source or reject or source_transform:
                 self.assertEqual(report["status"], "failed")
                 self.assertEqual(len(seen), 1)
             elif whitespace:
@@ -94,6 +114,7 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(seen), 2)
                 self.assertTrue(report["input_exact"])
                 self.assertTrue(report["verification_exact"])
+            return report
         finally:
             await server.close()
 
@@ -108,6 +129,16 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_model_source_change_never_continues(self):
         await self.exercise(change_source=True)
+        for transform, first_byte, crlf, backslashes in (
+                (lambda value: value.replace("\r\n", "\n"), 32, 0, 4),
+                (lambda value: value.replace("\\\\path", "\\path"), 17, 1, 3)):
+            with self.subTest(first_byte=first_byte):
+                report = await self.exercise(case="unicode-json", source_transform=transform)
+                detail = report["source_difference"]
+                self.assertEqual(detail["first_different_utf8_byte"], first_byte)
+                self.assertEqual(detail["actual_crlf_count"], crlf)
+                self.assertEqual(detail["actual_backslash_count"], backslashes)
+                self.assertTrue(all(type(v) is int or v is None for v in detail.values()))
 
     async def test_final_whitespace_is_diagnostic_only_and_never_passes(self):
         for whitespace in (" ", "\n", "\r\n", "\t", "\u00a0"):
@@ -118,6 +149,7 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
         await self.exercise(reject=True)
 
     async def test_explicit_character_named_and_structured_cases_keep_request_semantics(self):
-        for case in ("unicode-json", "named", "structured", "long-lines"):
+        for case in ("unicode-json", "unicode-json-lf", "unicode-arguments", "unicode-arguments-lf",
+                     "named", "structured", "long-lines"):
             with self.subTest(case=case):
                 await self.exercise(case=case)

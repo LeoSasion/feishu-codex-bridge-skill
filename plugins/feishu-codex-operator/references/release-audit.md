@@ -10,6 +10,34 @@ model selection, wake lease, lifecycle waiting, metadata-only requests,
 and App Server child cleanup. Run both while the exact installed service is
 stopped and no callback is pending. Neither proves live Feishu delivery.
 
+## Alpha.124 development validation (2026-09-10, unpublished)
+
+Full isolated regression passed 416 methods in 67.454 seconds. All four opt-in
+CLI methods ran using current official CLI 0.153.4 and the retained native-only
+catalog fixture; only the two Windows symlink subcases requiring privilege 1314
+were skipped. The focused probe/profile suite passed 19 methods, and the
+adapter/events/router/probe/profile suite passed 114 methods before the final
+LF argument-object variant was added to the existing probe loop.
+Package inventory, Python/PowerShell syntax and rule-mirror audit passed for
+107 plugin files. Installed inventory and startup checks still match alpha.123;
+the live model registry digest is unchanged.
+
+Only one test method was added, covering content-free byte-offset and character
+count diagnostics. Existing probe methods cover the new explicit prompt and
+line-ending variants, exact roundtrip, rejection without a second request, and
+profile import. The first checks reproduced the missing case/diagnostic support
+and profile allowlist omission before implementation. The custom-tool change
+clarifies outer JSON escaping versus source-language escapes; it does not repair
+model output or alter protocol validation, retries, model defaults or permissions.
+
+Eight new bounded online cases made thirteen upstream requests: three passed and
+five failed. Their distinct versions, conditions and limits are recorded in
+[official online models](official-online-models.md#alpha124-escaping-investigation-2026-09-10-unpublished).
+All historical failures remain visible. Exact Operator absence and zero pending
+callbacks were verified before testing; isolated fixtures did not contact Feishu
+or saved Codex tasks. Installed alpha.123, active registrations and routing remain
+unchanged. This development source is neither deployed nor published.
+
 ## Alpha.123 development validation (2026-09-09, unpublished)
 
 Final full regression passed 415 methods in 70.933 seconds. The four opt-in

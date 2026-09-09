@@ -10,7 +10,8 @@ import re
 from .model_registry import ModelRegistry, RouterError
 from .responses_tool_adapter import dumps, prepare_request
 
-CHECKS = frozenset({"json", "sse", "required", "named", "structured", "unicode", "unicode-json", "long", "long-lines",
+CHECKS = frozenset({"json", "sse", "required", "named", "structured", "unicode", "unicode-json", "unicode-json-lf",
+                    "unicode-arguments", "unicode-arguments-lf", "long", "long-lines",
                     "cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
                     "cli_patchplan", "cli_workspace", "cli_cancel"})
 CORE_CHECKS = frozenset({"cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",

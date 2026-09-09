@@ -279,7 +279,11 @@ def _compile_tools(payload, caps):
                 converted["description"] += (
                     "\nSet input to the actual caller-requested tool input verbatim. "
                     "Never copy the format metadata or grammar definition into input. "
-                    "Do not add a JSON or Markdown wrapper inside that string.")
+                    "Do not add a JSON or Markdown wrapper inside that string. "
+                    "Encode the outer function arguments as JSON once. Backslashes within the "
+                    "raw input belong to the original source: preserve them without interpreting "
+                    "source-language escapes. A backslash followed by n inside source code must "
+                    "remain those two characters, distinct from an actual LF or CRLF line break.")
             if kind == "tool_search":
                 converted.pop("execution")
                 converted["type"] = "function"

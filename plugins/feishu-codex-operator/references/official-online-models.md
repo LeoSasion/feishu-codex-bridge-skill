@@ -4,7 +4,8 @@ These explicit registrations are development candidates for the existing
 Responses adapter. They are packaged source assets, never automatically copied
 into the installed registry, activated by installation, or advertised as Desktop
 acceptance. The registrations retain their alpha.122 endpoint contracts;
-development source alpha.123 updates the probe/evaluation tools described below.
+development source alpha.124 clarifies wrapped-tool argument escaping and extends
+the probe diagnostics described below. It does not change candidate defaults.
 
 | Candidate | Official Responses base | Key environment variable | Effort |
 | --- | --- | --- | --- |
@@ -126,3 +127,66 @@ not establish its root cause or prove that plugin isolation fixed model stopping
 behavior. The alpha.122 failure stays failed; it is not overwritten or folded
 into the fourteen-case historical total. Unicode/CRLF failures were not rerun or
 reclassified. Full current CLI and Desktop acceptance remain incomplete.
+
+## Alpha.124 escaping investigation (2026-09-10, unpublished)
+
+The wrapped custom-tool description now separates outer JSON argument encoding
+from escapes inside the original source. It preserves the caller's description,
+tool identity and raw input. No output rewriting, line-ending normalization,
+additional permission, retry or model-default change is introduced. Protocol
+tests confirm that escaped source still travels unchanged through the adapter.
+
+The probe adds three explicitly named cases alongside the original CRLF case:
+`unicode-json-lf` changes only the requested separator to LF; `unicode-arguments`
+supplies the requested source in an `input` field of a JSON object; and
+`unicode-arguments-lf` combines that representation with an explicit LF separator.
+All keep exact source and final-answer checks. Receipts record the first differing
+UTF-8 byte offset and fixed CRLF/LF/backslash counts, never source text. These
+synthetic variants distinguish representation effects; none substitutes for a
+failed earlier case or for Desktop acceptance.
+
+Eight new, separately reserved live cases ran once each, totalling thirteen
+upstream requests and no retry. They are developmental observations with the
+exact adapter/evaluator digests in each private receipt, not one uniform-version
+acceptance suite:
+
+| Case | DeepSeek V4 Flash | GLM 5.3 Flash |
+| --- | --- | --- |
+| JSON string, LF source; prior wrapper description | none: failed, 52 → 51 bytes | low: failed, 52 → 51 bytes |
+| JSON argument object, CRLF source; clarified description | none: failed, 53 → 52 bytes | low: failed, 53 → 52 bytes |
+| JSON argument object, LF source; clarified description | none: passed, exact 52 bytes and final value | low: passed, exact 52 bytes and final value |
+| Isolated CLI file modification; clarified description | none: passed, four requests, exact file and final answer | Not run in this set |
+| JSON string, CRLF source; explicit high effort | Failed before call release: nonempty opaque upstream context | Not run |
+
+Both JSON-string/LF failures first differed at zero-based byte 43: one fewer
+backslash and one additional actual LF. With the argument-object representation
+and clarified description, backslash counts and content matched in both CRLF
+cases, but CRLF became LF at byte 32. This comparison changed both prompt
+representation and the tool description; it does not isolate their individual
+effects. The two LF passes support that precise guided representation only.
+They do not establish general source-copying reliability or repair the CRLF
+failures. Required CRLF must never be silently converted to LF.
+
+The high-effort DeepSeek response was completed upstream but contained a nonempty
+`encrypted_content` field in a message/reasoning item. The adapter rejected it
+with `opaque_upstream_context_not_supported`, returning local 502 before any
+executable call was released. No ciphertext was recorded or stripped. The
+candidate remains at none; increasing effort is not a verified fix. Its CLI
+workspace case still used the four-request budget, and the older fifth-request
+failure remains unresolved despite this further passing observation.
+
+This work references CC Switch commit
+[`2d54e261`](https://github.com/farion1231/cc-switch/blob/2d54e261c8a2f9e5b791e566c83048796bb2364b/src/config/codexProviderPresets.ts#L1147).
+Its DeepSeek native catalog uses low/high/max; its GLM native presets name
+glm-5.3 and glm-5-turbo, not glm-5.3-flash. The latter's exact contract must not
+inherit another model's declarations. Current DeepSeek
+[Responses documentation](https://api-docs.deepseek.com/api/create-response/)
+describes none as disabling thinking and high as enabling high effort; that
+parameter support alone does not prove compatibility with this adapter.
+
+For new files whose line endings are not otherwise constrained, an explicit
+UTF-8/LF requirement and byte readback provide a useful workflow. Preserve any
+existing or user-required CRLF policy and verify it exactly. Model-generated code
+must not be repaired, re-executed or declared correct merely because it ran.
+Full current CLI and Desktop acceptance remain incomplete. The installed
+alpha.123 runtime and both live candidate registrations were left unchanged.
