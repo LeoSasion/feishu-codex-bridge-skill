@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -33,7 +34,7 @@ class InstallUpgradeTests(unittest.TestCase):
                 PWSH, "-NoProfile", "-File",
                 str(ROOT / "scripts" / "install-feishu-codex-operator.ps1"),
                 "-ProjectRoot", str(project), "-Force", "-SkipHooks",
-                "-SkipRuntimeConfig",
+                "-SkipRuntimeConfig", "-SkipDesktopEntry",
             ]
             for _ in range(2):
                 result = subprocess.run(
@@ -50,6 +51,12 @@ class InstallUpgradeTests(unittest.TestCase):
                 for name, value in preserved.items():
                     self.assertEqual(value, (runtime / name).read_bytes(), name)
                 manifest = json.loads((runtime / "runtime-manifest.json").read_text())
+                startup = (ROOT / 'scripts' / 'start-feishu-codex-operator.ps1').read_text(encoding='utf-8')
+                manifest_check = startup.split('function Assert-OperatorRuntimeManifest {', 1)[1]
+                expected_block = re.search(r'\$expectedFiles = @\((.*?)\n\s*\)', manifest_check, re.S).group(1)
+                startup_files = re.findall(r"'([^']+)'", expected_block)
+                self.assertEqual(set(manifest['code_files']), set(startup_files),
+                                 'The startup guard must accept exactly the installed inventory')
                 self.assertIn("operator_core/runtime.py", manifest["code_files"])
                 for relative in (
                     "routing_cli.py",
@@ -57,6 +64,13 @@ class InstallUpgradeTests(unittest.TestCase):
                     "operator_core/final_callback.py",
                     "operator_core/beeper_provider.py",
                     "operator_core/beeper_model_catalog.json",
+                    "operator_core/responses_capabilities.py",
+                    "operator_core/responses_tool_adapter.py",
+                    "operator_core/responses_events.py",
+                    "operator_core/lmstudio_discovery.py",
+                    "operator_core/responses_verification.py",
+                    "operator_core/responses_labels.py",
+                    "operator_responses_probe.py",
                 ):
                     self.assertEqual(
                         hashlib.sha256((runtime / relative).read_bytes()).hexdigest(),

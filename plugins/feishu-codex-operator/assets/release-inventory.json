@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release_name": "feishu-codex-operator-plugin",
-  "source_version": "4.2.0-alpha.96",
+  "source_version": "4.2.0-alpha.116",
   "repository_files": [
     ".agents/plugins/marketplace.json",
     ".gitignore",
@@ -30,6 +30,8 @@
         "references/terminology.md",
         "scripts/audit-feishu-codex-release.ps1",
         "scripts/operator_main.py",
+        "scripts/operator_desktop_entry.ps1",
+        "scripts/operator_desktop_entry.cs",
         "scripts/operator_core/__init__.py",
         "scripts/operator_core/app_server_catalog.py",
         "scripts/operator_core/app_server.py",
@@ -43,15 +45,29 @@
         "scripts/operator_core/beeper_provider.py",
         "scripts/operator_core/beeper_model_catalog.json",
         "scripts/operator_core/model_registry.py",
+        "scripts/operator_core/responses_capabilities.py",
+        "scripts/operator_core/responses_tool_adapter.py",
+        "scripts/operator_core/responses_events.py",
         "scripts/operator_core/model_router.py",
         "scripts/operator_core/model_router_config.py",
+        "scripts/operator_core/lmstudio_discovery.py",
         "scripts/operator_model_router.py",
+        "scripts/operator_responses_probe.py",
         "scripts/model-router-requirements.txt",
         "references/model-router.md",
+        "references/responses-tool-compatibility-plan.md",
         "tests/test_model_router.py",
+        "tests/test_responses_tools.py",
+        "tests/test_responses_events.py",
+        "tests/test_responses_router.py",
+        "tests/test_responses_cli.py",
+        "tests/test_responses_probe.py",
         "tests/test_model_router_config.py",
+        "tests/test_lmstudio_discovery.py",
         "tests/test_model_catalog_cli.py",
         "tests/test_model_router_lifecycle.py",
+        "tests/test_desktop_entry.py",
+        "tests/test_registry_reload.py",
         "scripts/operator_core/beeper_relay.py",
         "scripts/operator_core/runtime.py",
         "scripts/operator_core/state.py",
@@ -81,23 +97,68 @@
         "tests/test_routing.py",
         "tests/test_source_route_contract.py",
         "tests/test_state.py",
-        "upgrade-operator.md"
+        "upgrade-operator.md",
+        "scripts/operator_core/responses_profiles.py",
+        "scripts/operator_core/responses_verification.py",
+        "scripts/operator_core/responses_labels.py",
+        "scripts/operator_core/responses_metrics.py",
+        "scripts/operator_responses_eval.py",
+        "tests/test_responses_profiles.py",
+        "tests/test_responses_verification.py",
+        "tests/test_responses_labels.py",
+        "tests/test_responses_metrics.py",
+        "tests/test_responses_eval.py",
+        "references/responses-acceptance.md",
+        "scripts/operator_installation.psm1",
+        "scripts/operator_desktop_setup.ps1",
+        "scripts/operator_uninstall.py",
+        "scripts/uninstall-feishu-codex-operator.ps1",
+        "tests/test_operator_installation.py",
+        "tests/test_operator_uninstall.py",
+        "references/installation-and-removal.md"
       ],
-      "allowed_empty_directories": ["tests/fixtures"]
+      "allowed_empty_directories": [
+        "tests/fixtures"
+      ]
     }
   ],
   "exclusions": [
     {
       "id": "vcs_and_local_state",
-      "directory_paths": [".git", ".codex", ".agents/skills", ".tmp", "tests/.tmp"],
-      "directory_names": ["__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "node_modules"],
-      "exact_paths": ["AGENTS.md", "EXPERIMENT-LOG.md", "skills-lock.json"],
-      "file_suffixes": [".pyc", ".pyo"],
+      "directory_paths": [
+        ".git",
+        ".codex",
+        ".agents/skills",
+        ".tmp",
+        "tests/.tmp"
+      ],
+      "directory_names": [
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "node_modules"
+      ],
+      "exact_paths": [
+        "AGENTS.md",
+        "EXPERIMENT-LOG.md",
+        "skills-lock.json"
+      ],
+      "file_suffixes": [
+        ".pyc",
+        ".pyo"
+      ],
       "must_be_absent": false
     }
   ],
   "forbidden_artifacts": {
-    "directory_names": ["attachments", "runtime", "staging", "venv"],
+    "directory_names": [
+      "attachments",
+      "runtime",
+      "staging",
+      "venv"
+    ],
     "file_names": [
       "operator.env",
       "operator.lock",

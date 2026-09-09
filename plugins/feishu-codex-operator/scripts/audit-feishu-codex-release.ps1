@@ -74,7 +74,7 @@ $python = Get-Command python -ErrorAction Stop
 & $python.Source -B -c "import json,pathlib,sys; root=pathlib.Path(sys.argv[1]); inventory=json.loads((root/'assets/release-inventory.json').read_text(encoding='utf-8')); files=[root/p for c in inventory['components'] for p in c['paths'] if p.endswith('.py')]; [compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec') for p in files]" $pluginRoot
 if ($LASTEXITCODE -ne 0) { throw 'Python syntax validation failed.' }
 
-foreach ($script in Get-ChildItem -LiteralPath (Join-Path $pluginRoot 'scripts') -Filter '*.ps1' -File) {
+foreach ($script in Get-ChildItem -LiteralPath (Join-Path $pluginRoot 'scripts') -File | Where-Object Extension -in @('.ps1','.psm1')) {
     $tokens = $null
     $errors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile(

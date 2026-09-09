@@ -4,12 +4,14 @@ param(
     [switch]$Force,
     [switch]$SkipHooks,
     [switch]$SkipRuntimeConfig,
+    [switch]$SkipDesktopEntry,
     [switch]$HooksOnly,
     [string]$BeeperThreadId = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $project = (Resolve-Path -LiteralPath $ProjectRoot).Path
+Import-Module (Join-Path $PSScriptRoot 'operator_installation.psm1') -Force -DisableNameChecking
 $source = Split-Path -Parent $PSScriptRoot
 $runtime = Join-Path $project '.codex\feishu-codex-operator-runtime'
 $hooksRoot = Join-Path $project '.codex\hooks'
@@ -19,6 +21,8 @@ $hooksConfig = Join-Path $project '.codex\hooks.json'
 $envFile = Join-Path $runtime 'operator.env'
 $manifestFile = Join-Path $runtime 'runtime-manifest.json'
 $operatorFile = Join-Path $runtime 'operator_main.py'
+$freshRuntime = -not (Test-Path -LiteralPath $operatorFile) -and -not (Test-Path -LiteralPath $manifestFile) -and
+    -not (Test-Path -LiteralPath $startHook) -and -not (Test-Path -LiteralPath $stopHook)
 $backupRoot = Join-Path $runtime ('backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 
 function Test-OperatorProcess {
@@ -78,7 +82,9 @@ function Install-File([string]$From, [string]$To) {
         }
         Backup-File $To
     }
-    Copy-Item -LiteralPath $From -Destination $To -Force
+    if ($To -in @($startHook,$stopHook)) {
+        Set-OperatorManagedFile -ProjectRoot $project -Path $To -Bytes ([IO.File]::ReadAllBytes($From))
+    } else { Copy-Item -LiteralPath $From -Destination $To -Force }
 }
 
 function Ensure-Environment {
@@ -253,11 +259,22 @@ function Update-Hooks {
         if ($property) {
             foreach ($group in @($property.Value)) {
                 $commands = @($group.hooks)
-                $isOperator = $false
+                $remainingCommands = @()
                 foreach ($command in $commands) {
-                    if ([string]$command.command -like '*feishu-codex-operator.ps1*') { $isOperator = $true }
+                    $owned = $false
+                    foreach ($scriptPath in @($startHook,$stopHook)) {
+                        $expected = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath
+                        if ([string]$command.command -in @($expected,($expected+' -HookInvocation')) -and
+                            (-not $command.PSObject.Properties['commandWindows'] -or $command.commandWindows -ceq $command.command)) { $owned = $true }
+                    }
+                    if (-not $owned) { $remainingCommands += $command }
                 }
-                if (-not $isOperator) { $kept += $group }
+                if ($remainingCommands.Count -eq $commands.Count) { $kept += $group }
+                elseif ($remainingCommands.Count) {
+                    $retainedGroup = $group | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+                    $retainedGroup.hooks = @($remainingCommands)
+                    $kept += $retainedGroup
+                }
             }
         }
         $newGroup = if ($eventName -eq 'SessionStart') {
@@ -275,10 +292,8 @@ function Update-Hooks {
         else { $config.hooks | Add-Member -NotePropertyName $eventName -NotePropertyValue @($kept) }
     }
 
-    $temporary = "$hooksConfig.tmp"
     $json = $config | ConvertTo-Json -Depth 30
-    [System.IO.File]::WriteAllText($temporary, $json, [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $temporary -Destination $hooksConfig -Force
+    Set-OperatorManagedFile -ProjectRoot $project -Path $hooksConfig -Bytes ([Text.UTF8Encoding]::new($false).GetBytes($json))
 }
 
 function Write-RuntimeManifest {
@@ -298,9 +313,19 @@ function Write-RuntimeManifest {
         'operator_core/beeper_provider.py',
         'operator_core/beeper_model_catalog.json',
         'operator_core/model_registry.py',
+        'operator_core/responses_capabilities.py',
+        'operator_core/responses_tool_adapter.py',
+        'operator_core/responses_events.py',
+        'operator_core/responses_metrics.py',
+        'operator_core/responses_profiles.py',
+        'operator_core/responses_verification.py',
+        'operator_core/responses_labels.py',
         'operator_core/model_router.py',
         'operator_core/model_router_config.py',
+        'operator_core/lmstudio_discovery.py',
         'operator_model_router.py',
+        'operator_responses_probe.py',
+        'operator_responses_eval.py',
         'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
@@ -313,7 +338,7 @@ function Write-RuntimeManifest {
     }
     $manifest = [ordered]@{
         schema_version = 1
-        operator_version = '4.2.0-alpha.96'
+        operator_version = '4.2.0-alpha.116'
         code_files = $hashes
         start_hook_sha256 = (Get-FileHash -LiteralPath $startHook -Algorithm SHA256).Hash.ToLowerInvariant()
         stop_hook_sha256 = (Get-FileHash -LiteralPath $stopHook -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -327,6 +352,11 @@ function Write-RuntimeManifest {
 }
 
 Test-OperatorProcess
+if (-not $SkipDesktopEntry -and -not $HooksOnly) {
+    . (Join-Path $PSScriptRoot 'operator_desktop_setup.ps1') -ProjectRoot $project -Library
+    Show-OperatorInstallationNotice
+}
+Start-OperatorInstallation -ProjectRoot $project -LinkPaths @(Get-OperatorDesktopPaths)
 New-Item -ItemType Directory -Force -Path $runtime, $hooksRoot | Out-Null
 
 Install-File (Join-Path $source 'scripts\start-feishu-codex-operator.ps1') $startHook
@@ -358,9 +388,19 @@ if ($HooksOnly) {
     'operator_core\beeper_provider.py',
     'operator_core\beeper_model_catalog.json',
     'operator_core\model_registry.py',
+    'operator_core\responses_capabilities.py',
+    'operator_core\responses_tool_adapter.py',
+    'operator_core\responses_events.py',
+    'operator_core\responses_metrics.py',
+    'operator_core\responses_profiles.py',
+    'operator_core\responses_verification.py',
+    'operator_core\responses_labels.py',
     'operator_core\model_router.py',
     'operator_core\model_router_config.py',
+    'operator_core\lmstudio_discovery.py',
     'operator_model_router.py',
+    'operator_responses_probe.py',
+    'operator_responses_eval.py',
     'model-router-requirements.txt',
     'operator_core\beeper_relay.py',
     'operator_core\runtime.py',
@@ -373,11 +413,16 @@ foreach ($relative in $runtimeFiles) {
 Ensure-Environment
 Set-MinimalBeeperThreadId
 Write-RuntimeManifest
+$ownerFile = Join-Path $project '.codex/operator-installation/runtime-owner.json'
+if ($freshRuntime -and -not (Test-Path -LiteralPath $ownerFile)) {
+    Write-OperatorAtomicBytes $ownerFile ([Text.UTF8Encoding]::new($false).GetBytes((@{schema_version=1; project=$project; fresh_install=$true} | ConvertTo-Json)))
+}
 $health = Join-Path $runtime 'health.json'
 if (Test-Path -LiteralPath $health -PathType Leaf) {
     Backup-File $health
     Remove-Item -LiteralPath $health -Force
 }
 
-Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.96 into $runtime"
+Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.116 into $runtime"
 Write-Output 'The Operator remains stopped. Configure the minimal Beeper UUID, register Final Callback routing, review Hooks in Desktop settings, then start it.'
+if (-not $SkipDesktopEntry) { Install-OperatorDesktopEntry -ProjectRoot $project | ConvertTo-Json }

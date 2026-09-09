@@ -1,7 +1,12 @@
 # Feishu Codex Operator
 
-Source version: `4.2.0-alpha.96`. Operator（接线员）maps each Feishu private
+Source version: `4.2.0-alpha.116`. Operator（接线员）maps each Feishu private
 chat, group, or topic to one existing Codex Desktop task.
+
+Local-model CLI evaluation supports explicit `--final-text-policy marker_line_v1`
+for bounded blank lines around synthetic final reports. Default exact checks and
+all raw model text, tool/file checks and historical failures remain preserved.
+See [acceptance rules](references/responses-acceptance.md#cross-model-final-report-compatibility-alpha110).
 
 ```text
 Feishu -> Operator inbox and exact task mapping
@@ -15,6 +20,9 @@ wake-up signal (currently a Desktop deep link) only when needed. The existing
 
 ## Install and operate on Windows
 
+Run these scripts in PowerShell 7 (`pwsh`). Windows PowerShell 5.1 can misread
+the UTF-8 scripts using its legacy text encoding and fail before installation.
+
 Canonical source: `plugins/feishu-codex-operator`. Plugin and skill ID:
 `feishu-codex-operator`. All runtime settings use `CODEX_OPERATOR_*`.
 
@@ -22,6 +30,7 @@ From the repository root, first configure Feishu authentication and one allowed
 identity using the skill. Then, for a new installation:
 
 ```powershell
+.\plugins\feishu-codex-operator\scripts\feishu-codex-operator.ps1 operator init
 .\plugins\feishu-codex-operator\scripts\feishu-codex-operator.ps1 operator install -BeeperThreadId <task_uuid>
 .\plugins\feishu-codex-operator\scripts\feishu-codex-operator.ps1 operator final-callback-register
 .\plugins\feishu-codex-operator\scripts\feishu-codex-operator.ps1 operator start
@@ -31,6 +40,12 @@ Use `operator upgrade` for an existing Operator installation, after stopping
 the exact service. See [Upgrade and migration](upgrade-operator.md) when moving
 from the previous product name; old commands and import aliases are not supported.
 Review SessionStart and SessionEnd in [Desktop settings](references/permissions-and-hooks.md).
+
+Initialization explains and configures the current user's Codex launch shortcuts,
+with original-file backups. New installations can preview recovery with
+`operator uninstall`, then use `operator uninstall -Apply` before removing the
+plugin in Desktop. User edits block conflicting restoration; data is retained.
+See [initialization and safe removal](references/installation-and-removal.md).
 
 `CODEX_OPERATOR_BEEPER_MODEL` accepts `beeper`, `gpt-5.3-codex-spark`, or
 `gpt-5.6-luna`. Missing or blank selects Luna/low. `beeper` is a deterministic
@@ -42,13 +57,52 @@ only to Beeper queue commands and do not modify global Codex config.
 The optional [Python Responses router](references/model-router.md) now ships
 with the runtime: it appends model registrations, passes native traffic to its
 native backend and routes external aliases to configured Responses endpoints.
-Alpha.96 adds bounded LM Studio model discovery and explicit append-only local
-registration; it never downloads models, sends inference or activates Codex.
+Alpha.107 adds read-only Desktop evidence gates with model/version binding and
+explicit missing, failed and stale outcomes; it never promotes a catalog label
+from a model-generated success claim. Alpha.106 adds opt-in LM Studio batch discovery from its local model inventory.
+Alpha.108 adds an explicit stopped transaction to preview and update one
+verification label from fresh evidence, with registry comparison, a retained
+original backup and unchanged model contracts. It does not run during discovery
+or update a live Desktop catalog.
+Alpha.109 checks streamed text, refusal and reasoning parts against their final
+snapshots before releasing buffered tools. It preserves whitespace verbatim and
+rejects inconsistent text rather than trimming it. Verification reports now
+separate CLI failures, missing evidence and version drift, retain combined CLI
+and Desktop failure counts, and offer `verification-status --format text`.
+An explicit shared Responses policy supplies new, unverified registrations;
+embeddings are excluded and existing registrations are preserved. A prepared
+startup entry can synchronize before opening Desktop, with the owned router
+entry deactivated and its service stopped. Owners may explicitly connect their
+desktop and Start menu shortcuts to the quiet unified launcher. A cold launch
+runs the reviewed startup workflow; an already running Desktop is only opened.
+See [unified launch entry](references/model-router.md#owner-selected-unified-launch-entry-alpha114).
+Alpha.97 adds explicit registry v2 Responses tool compatibility: custom/function
+mapping, namespace and client tool-search handling, success-gated JSON/SSE tool
+restoration, and shared HTTP/WebSocket adaptation. v1 routes keep their existing
+passthrough behavior. Alpha.99 adds [capability profiles, preflight and real-CLI
+acceptance](references/responses-acceptance.md), phase timings and explicit service
+restart. Alpha.98 adds explicit text-part result serialization for
+string-only endpoints, reasoning-specific tool-choice checks, serial-call
+compatibility and incremental SSE line scanning. Registration never performs inference or activates Codex;
+the separate synthetic probe command requires an explicit model and receipt path.
 It has no LiteLLM dependency or Chat Completions conversion. Detached background
 start/status/stop and current CLI catalog loading are tested. Global activation,
 Windows login startup and live Desktop dropdown/task-default acceptance remain
 pending; the installer does not change the global entry point. Native
 catalog rows are preserved and Spark/Luna are never sent to external providers.
+In the owner's controlled alpha.106 startup trial, the runtime upgrade and
+one-model LM Studio batch append completed; Qwen3.8 appeared in Desktop's
+catalog cache and the owner confirmed it in the dropdown. Qwen3.6 and protected
+Operator state were preserved. This verifies that startup path and picker
+visibility. Three subsequent actual Desktop cases verified stopping at exit 7,
+file/tool roundtrips with three existing tests passing, and an explicit byte
+recipe with exact readback. Free-form PowerShell generation wrote a literal
+backtick-n instead of LF and honestly reported the mismatch. That failed sample
+is retained; Qwen3.8 remains unverified and general global readiness is pending.
+A visible Windows file-write guide and a subsequent guided Chinese-text case
+verified exact UTF-8/LF output in the same disposable task. See the
+[acceptance notes](references/responses-acceptance.md#windows-file-write-guidance-for-local-model-tasks)
+for the workflow and its limits; no runtime command rewriting is performed.
 Alpha.91 adds opaque forwarding for native search/image endpoints and preserves
 compressed native request bytes. These transport contracts are isolated-test
 evidence; live native tool and Desktop picker acceptance are still required.
