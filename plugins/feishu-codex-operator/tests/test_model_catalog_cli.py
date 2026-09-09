@@ -23,10 +23,13 @@ class CurrentCliCatalogTests(unittest.TestCase):
         cached = json.loads(Path(os.environ["CODEX_OPERATOR_TEST_CATALOG"]).read_text(encoding="utf-8"))
         beeper = json.loads((Path(__file__).resolve().parents[1] /
             "scripts/operator_core/beeper_model_catalog.json").read_text(encoding="utf-8"))
-        registry = ModelRegistry({"version": 1, "models": [{
+        from copy import deepcopy
+        from test_responses_tools import ROUTE
+        adapted = {**deepcopy(ROUTE), "slug": "local/adapted-catalog-check", "reasoning_efforts": ["none", "low"]}
+        registry = ModelRegistry({"version": 2, "models": [{
             "slug": "api/catalog-check", "display_name": "Catalog check",
             "model": "catalog-check", "api_base": "http://127.0.0.1:1/v1",
-            "api_key_env": "", "context_window": 32000, "reasoning_efforts": ["low"]}]}, beeper)
+            "api_key_env": "", "context_window": 32000, "reasoning_efforts": ["low"], "responses": None}, adapted]}, beeper)
         native = {"models": cached["models"]}
         merged = registry.merge(native)
         self.assertEqual(native["models"], merged["models"][:len(native["models"])])
@@ -53,6 +56,8 @@ class CurrentCliCatalogTests(unittest.TestCase):
             models = {row["model"]: row for row in result["data"]}
             self.assertIn("beeper", models)
             self.assertIn("api/catalog-check", models)
+            self.assertIn("local/adapted-catalog-check", models)
+            self.assertEqual("none", models["local/adapted-catalog-check"]["defaultReasoningEffort"])
             self.assertEqual("low", models["beeper"]["defaultReasoningEffort"])
             self.assertFalse(models["beeper"]["hidden"])
             for row in native["models"]:

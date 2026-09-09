@@ -35,7 +35,9 @@ param(
 
     [switch]$Json,
 
-    [switch]$RunTests
+    [switch]$RunTests,
+    [switch]$Apply,
+    [string]$StartupBundle
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +57,8 @@ Usage:
   feishu-codex-operator.ps1 operator init|install|start|stop|restart
   feishu-codex-operator.ps1 operator hooks
   feishu-codex-operator.ps1 operator upgrade [-BeeperThreadId <task_uuid>]
+  feishu-codex-operator.ps1 operator desktop-entry [-StartupBundle <reviewed_bundle>]
+  feishu-codex-operator.ps1 operator uninstall [-Apply]
   feishu-codex-operator.ps1 operator beeper-configure -BeeperThreadId <task_uuid>
   feishu-codex-operator.ps1 operator final-callback-status
   feishu-codex-operator.ps1 operator final-callback-register
@@ -79,6 +83,8 @@ function Show-WelcomeAndAutomaticWorkflow {
 首次消息会提示发送 /init，随后通过对话菜单查看并选择一个现有、未归档的 Codex Desktop 任务。当前版本不创建、恢复、归档或压缩任务。Operator 把普通消息 queue 到固定的最小 Beeper；Beeper 只向精确绑定的 Responder 中继一次。业务执行与最终答案始终由该 Responder 所有。默认只回传 Final Callback 的最终答案，不发送思考或工具过程。
 
 Operator 挂载会在当前项目写入桥接运行文件和 Codex hooks，也不会替用户授予飞书权限。/init 的独立 App Server 只按需执行 thread/list 和 includeTurns=false 的 thread/read，不创建 Desktop 查询对话。Responder 自己的模型、推理、沙箱、插件和知识库设置保持不变；Operator 不安装、注册或检索 Obsidian。
+
+Operator 初始化还会配置当前用户桌面和开始菜单的 Codex 入口，并先保存原快捷方式；任务栏可能需要手动重新固定。卸载时应先运行 operator uninstall 预览，再运行 operator uninstall -Apply 恢复，成功后才在 Desktop 移除插件。直接删除插件不代表项目配置已恢复；后续用户修改会阻止冲突恢复，模型文件和业务数据会保留。
 
 自动执行不会扩大请求范围：每次写入前仍核对精确目标、路径、版本、进程身份、影响范围和恢复路径；发布、凭据变更、跨项目修改或请求范围外的破坏性操作仍需用户明确提出。飞书二维码、OAuth、UAC 或身份页面若真实要求真人操作，只交还该不可自动化的外部交互，随后继续其余已请求流程。locked access 在至少配置一个经验证身份前保持拒绝全部事件。
 '@ | Write-Output
@@ -631,6 +637,7 @@ function Invoke-Installer {
         # retired Router/Beeper configuration names are migrated. Hook
         # registration and restart remain separately observable transactions.
         $arguments['SkipHooks'] = $true
+        $arguments['SkipDesktopEntry'] = $true
     } else {
         $paths = Get-OperatorPaths
         $runtimeResidue = @()
@@ -824,6 +831,10 @@ function Get-OperatorParity {
             (Join-Path $skillRoot 'scripts\operator_core\model_router_config.py'),
             (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_router_config.py')
         )
+        'operator_core\lmstudio_discovery.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\lmstudio_discovery.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\lmstudio_discovery.py')
+        )
         'operator_core\model_router.py' = @(
             (Join-Path $skillRoot 'scripts\operator_core\model_router.py'),
             (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_router.py')
@@ -831,6 +842,42 @@ function Get-OperatorParity {
         'operator_core\model_registry.py' = @(
             (Join-Path $skillRoot 'scripts\operator_core\model_registry.py'),
             (Join-Path (Get-OperatorPaths).Runtime 'operator_core\model_registry.py')
+        )
+        'operator_core\responses_capabilities.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_capabilities.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_capabilities.py')
+        )
+        'operator_core\responses_tool_adapter.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_tool_adapter.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_tool_adapter.py')
+        )
+        'operator_core\responses_events.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_events.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_events.py')
+        )
+        'operator_core\responses_metrics.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_metrics.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_metrics.py')
+        )
+        'operator_core\responses_profiles.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_profiles.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_profiles.py')
+        )
+        'operator_core\responses_verification.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_verification.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_verification.py')
+        )
+        'operator_core\responses_labels.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_core\responses_labels.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_core\responses_labels.py')
+        )
+        'operator_responses_eval.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_responses_eval.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_responses_eval.py')
+        )
+        'operator_responses_probe.py' = @(
+            (Join-Path $skillRoot 'scripts\operator_responses_probe.py'),
+            (Join-Path (Get-OperatorPaths).Runtime 'operator_responses_probe.py')
         )
         'operator_core\beeper_model_catalog.json' = @(
             (Join-Path $skillRoot 'scripts\operator_core\beeper_model_catalog.json'),
@@ -897,9 +944,19 @@ function Get-InstalledOperatorManifestIssues {
         'operator_core/beeper_provider.py',
         'operator_core/beeper_model_catalog.json',
         'operator_core/model_registry.py',
+        'operator_core/responses_capabilities.py',
+        'operator_core/responses_tool_adapter.py',
+        'operator_core/responses_events.py',
+        'operator_core/responses_metrics.py',
+        'operator_core/responses_profiles.py',
+        'operator_core/responses_verification.py',
+        'operator_core/responses_labels.py',
         'operator_core/model_router.py',
         'operator_core/model_router_config.py',
+        'operator_core/lmstudio_discovery.py',
         'operator_model_router.py',
+        'operator_responses_probe.py',
+        'operator_responses_eval.py',
         'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
@@ -2093,7 +2150,19 @@ switch ($scopeName) {
     }
     'operator' {
         switch ($actionName) {
-            'init' { Invoke-AgentsInit }
+            'init' {
+                . (Join-Path $PSScriptRoot 'operator_desktop_setup.ps1') -ProjectRoot (Resolve-Project) -StartupBundle $StartupBundle -Library
+                Show-OperatorInstallationNotice
+                Start-OperatorInstallation -ProjectRoot (Resolve-Project) -LinkPaths @(Get-OperatorDesktopPaths)
+                Invoke-AgentsInit
+                Install-OperatorDesktopEntry -ProjectRoot (Resolve-Project) -StartupBundle $StartupBundle | ConvertTo-Json
+            }
+            'desktop-entry' {
+                & (Join-Path $PSScriptRoot 'operator_desktop_setup.ps1') -Action install -ProjectRoot (Resolve-Project) -StartupBundle $StartupBundle
+            }
+            'uninstall' {
+                & (Join-Path $PSScriptRoot 'uninstall-feishu-codex-operator.ps1') -ProjectRoot (Resolve-Project) -Apply:$Apply
+            }
             'install' { Invoke-Installer }
             'upgrade' { Invoke-Installer -Upgrade; Write-Output 'Upgrade installed. Continue with the separately observable operator restart transaction to activate it.' }
             'hooks' { Invoke-OperatorHooksRefresh }

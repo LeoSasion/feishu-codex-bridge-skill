@@ -77,6 +77,7 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
         self.ws_headers = {}
         self.status = 200
         self.json_response = False
+        self.negotiate_compression = False
         self.stream_body = b'data: {"type":"response.completed"}\n\ndata: [DONE]\n\n'
 
         async def upstream(request):
@@ -99,6 +100,13 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
             body = await request.read()
             self.endpoints.append(request.raw_path)
             self.received.append((body, dict(request.headers)))
+            if self.negotiate_compression:
+                response_body = b'{"synthetic_search_result":true}\n'
+                response_headers = {"Content-Type": "application/x-ndjson"}
+                if "gzip" in request.headers.get("Accept-Encoding", ""):
+                    response_body = gzip.compress(response_body)
+                    response_headers["Content-Encoding"] = "gzip"
+                return web.Response(body=response_body, headers=response_headers)
             if self.json_response:
                 return web.json_response({"id": "resp_test", "object": "response", "created_at": 1,
                     "model": "gpt-5", "status": "completed", "output": [], "usage": {
@@ -245,6 +253,28 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(404, response.status)
         self.assertEqual([], self.received)
 
+    async def test_native_compression_negotiation_preserves_client_absence(self):
+        self.negotiate_compression = True
+        raw = b'{"synthetic_search_result":true}\n'
+        for endpoint in ("alpha/search", "responses"):
+            for accepted in (None, "identity", "gzip"):
+                with self.subTest(endpoint=endpoint, accepted=accepted):
+                    headers = dict(self.headers)
+                    if accepted is not None:
+                        headers["Accept-Encoding"] = accepted
+                    response = await self.client.post(self.prefix + "/" + endpoint,
+                        json={"model": "native-test", "input": "synthetic"}, headers=headers,
+                        skip_auto_headers={"Accept-Encoding"}, auto_decompress=False)
+                    self.assertEqual(200, response.status)
+                    body = await response.read()
+                    self.assertEqual(accepted, self.received[-1][1].get("Accept-Encoding"))
+                    if accepted == "gzip":
+                        self.assertEqual("gzip", response.headers.get("Content-Encoding"))
+                        self.assertEqual(raw, gzip.decompress(body))
+                    else:
+                        self.assertNotIn("Content-Encoding", response.headers)
+                        self.assertEqual(raw, body)
+
     async def test_native_compressed_request_and_response_bytes_are_preserved(self):
         try:
             from compression import zstd
@@ -273,14 +303,74 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Content-Encoding", headers)
         self.assertNotIn("ChatGPT-Account-Id", headers)
 
+    async def test_native_http_above_old_16_mib_limit_preserves_wire_bytes(self):
+        self.upstream.app._client_max_size = 65 * 1024 * 1024
+        raw = b'{"model":"native-test","input":"' + b'x' * (17 * 1024 * 1024) + b'"}'
+        for encoding, body in (("identity", raw), ("gzip", gzip.compress(raw))):
+            with self.subTest(encoding=encoding):
+                response = await self.client.post(self.prefix + "/responses", data=body,
+                    headers={**self.headers, "Content-Encoding": encoding})
+                self.assertEqual(200, response.status, await response.text())
+                self.assertEqual(body, self.received[-1][0])
+                self.assertEqual(encoding, self.received[-1][1]["Content-Encoding"])
+
     async def test_incomplete_and_oversized_compressed_requests_never_dispatch(self):
         from operator_core import model_router
-        for raw in (b"not-gzip", gzip.compress(b'{"model":"native-test"}')[:-2], gzip.compress(b"x" * 2048)):
-            with patch.object(model_router, "MAX_BODY", 1024):
+        for raw, status in ((b"not-gzip", 400), (gzip.compress(b'{"model":"native-test"}')[:-2], 400),
+                            (gzip.compress(b"x" * 2048), 413)):
+            with patch.object(model_router, "MAX_NATIVE_HTTP_BODY", 1024):
                 response = await self.client.post(self.prefix + "/responses", data=raw,
                     headers={**self.headers, "Content-Encoding": "gzip"})
-            self.assertEqual(400, response.status)
+            self.assertEqual(status, response.status)
         self.assertEqual([], self.received)
+
+    async def test_external_large_http_body_keeps_original_limit(self):
+        raw = b'{"model":"local/example","input":"' + b'x' * (17 * 1024 * 1024) + b'"}'
+        for encoding, body in (("identity", raw), ("gzip", gzip.compress(raw))):
+            response = await self.client.post(self.prefix + "/responses", data=body,
+                headers={**self.headers, "Content-Encoding": encoding})
+            self.assertEqual(413, response.status)
+            error = (await response.json())["error"]
+            self.assertEqual(error["code"], "router_request_too_large")
+            self.assertEqual(error["limit_bytes"], 16 * 1024 * 1024)
+            self.assertEqual(error["scope"], "external_request")
+        self.assertEqual([], self.received)
+
+    async def test_native_wire_and_decoded_limits_report_413_without_dispatch(self):
+        from operator_core import model_router
+        raw = b'{"model":"native-test","input":"' + b'x' * 1100 + b'"}'
+        with patch.object(model_router, "MAX_NATIVE_HTTP_BODY", 1024), \
+                patch.object(self.client.server.app, "_client_max_size", 1025):
+            for encoding, body, scope in (("identity", raw, "http_request"),
+                                          ("gzip", gzip.compress(raw), "decoded_request")):
+                response = await self.client.post(self.prefix + "/responses", data=body,
+                    headers={**self.headers, "Content-Encoding": encoding})
+                self.assertEqual(413, response.status)
+                error = (await response.json())["error"]
+                self.assertEqual(error["code"], "router_request_too_large")
+                self.assertEqual(error["scope"], scope)
+                self.assertEqual(error["limit_bytes"], 1024)
+        self.assertEqual([], self.received)
+
+    async def test_native_exact_http_limit_is_accepted(self):
+        from operator_core import model_router
+        raw = b'{"model":"native-test","input":[]}'
+        raw += b' ' * (1024 - len(raw))
+        with patch.object(model_router, "MAX_NATIVE_HTTP_BODY", 1024), \
+                patch.object(self.client.server.app, "_client_max_size", 1025):
+            response = await self.client.post(self.prefix + "/responses", data=raw, headers=self.headers)
+            self.assertEqual(200, response.status)
+            await response.read()
+        self.assertEqual(self.received[0][0], raw)
+
+    async def test_upstream_413_remains_distinct_and_unchanged(self):
+        self.status = 413
+        self.stream_body = b'{"error":"synthetic upstream size limit"}'
+        response = await self.client.post(self.prefix + "/responses",
+            json={"model": "native-test", "input": []}, headers=self.headers)
+        self.assertEqual(413, response.status)
+        self.assertEqual(self.stream_body, await response.read())
+        self.assertEqual(len(self.received), 1)
 
     async def test_identity_works_without_native_credentials(self):
         response = await self.client.post(self.prefix + "/responses", json={"model": "beeper", "input": "hello"})

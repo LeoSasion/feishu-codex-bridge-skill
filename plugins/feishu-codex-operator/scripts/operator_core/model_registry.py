@@ -5,14 +5,13 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
-
-class RouterError(ValueError):
-    """Safe, content-free error suitable for the local API."""
+from .responses_capabilities import ResponsesCapabilities, RouterError
 
 
 @dataclass(frozen=True)
@@ -24,6 +23,7 @@ class ModelRoute:
     api_key_env: str
     context_window: int
     reasoning_efforts: tuple[str, ...]
+    responses: ResponsesCapabilities | None = None
 
     def key(self) -> str:
         if not self.api_key_env:
@@ -36,13 +36,17 @@ class ModelRoute:
 
 class ModelRegistry:
     def __init__(self, value: dict, beeper_catalog: dict) -> None:
-        if set(value) != {"version", "models"} or value["version"] != 1:
+        if (not isinstance(value, dict) or set(value) != {"version", "models"}
+                or type(value["version"]) is not int or value["version"] not in {1, 2}):
             raise RouterError("invalid_registry_version_or_fields")
         if not isinstance(value["models"], list) or len(value["models"]) > 100:
             raise RouterError("invalid_models")
         self.beeper = deepcopy(beeper_catalog["models"][0])
         self.routes: dict[str, ModelRoute] = {}
-        fields = set(ModelRoute.__dataclass_fields__)
+        self.version = value["version"]
+        fields = set(ModelRoute.__dataclass_fields__) - {"responses"}
+        if self.version == 2:
+            fields.add("responses")
         for row in value["models"]:
             if not isinstance(row, dict) or set(row) != fields:
                 raise RouterError("invalid_route_fields")
@@ -67,15 +71,46 @@ class ModelRegistry:
             if type(row["context_window"]) is not int or not 1024 <= row["context_window"] <= 2000000:
                 raise RouterError("invalid_context_window")
             efforts = row["reasoning_efforts"]
-            if (not isinstance(efforts, list) or not efforts or len(efforts) != len(set(efforts))
-                    or any(e not in {"none", "minimal", "low", "medium", "high", "xhigh"} for e in efforts)):
+            if (not isinstance(efforts, list) or not efforts
+                    or any(not isinstance(e, str) or e not in {
+                        "none", "minimal", "low", "medium", "high", "xhigh", "max"} for e in efforts)
+                    or len(efforts) != len(set(efforts))):
                 raise RouterError("invalid_reasoning_efforts")
-            self.routes[slug] = ModelRoute(**{**row, "reasoning_efforts": tuple(efforts)})
+            capabilities = row.get("responses")
+            if capabilities is not None:
+                capabilities = ResponsesCapabilities.parse(capabilities)
+                if any(effort not in set(efforts) | {"unspecified"}
+                       for effort, _ in capabilities.tool_choice_by_reasoning):
+                    raise RouterError("reasoning_tool_choice_profile_not_registered")
+            self.routes[slug] = ModelRoute(**{**row, "reasoning_efforts": tuple(efforts),
+                                            "responses": capabilities})
 
     @classmethod
     def load(cls, path: Path) -> "ModelRegistry":
         return cls(json.loads(path.read_text(encoding="utf-8")), json.loads(
             Path(__file__).with_name("beeper_model_catalog.json").read_text(encoding="utf-8")))
+
+    @classmethod
+    def load_snapshot(cls, path: Path, expected_sha256: str | None = None):
+        """One bounded, strict read for an explicit reload, never request-path I/O."""
+        from .responses_tool_adapter import loads
+        try:
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("regular registry required")
+            with path.open("rb") as handle:
+                raw = handle.read(1048577)
+            if len(raw) > 1048576:
+                raise ValueError("registry too large")
+            digest = hashlib.sha256(raw).hexdigest()
+            if expected_sha256 is not None and digest != expected_sha256:
+                raise RouterError("registry_reload_digest_mismatch")
+            registry = cls(loads(raw), json.loads(
+                Path(__file__).with_name("beeper_model_catalog.json").read_text(encoding="utf-8")))
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            if isinstance(exc, RouterError) and str(exc) == "registry_reload_digest_mismatch":
+                raise
+            raise RouterError("registry_reload_invalid_registry") from exc
+        return registry, digest
 
     def merge(self, catalog: dict) -> dict:
         if not isinstance(catalog, dict) or not isinstance(catalog.get("models"), list):
@@ -91,7 +126,9 @@ class ModelRegistry:
             raise RouterError("native_template_unavailable")
         added = [deepcopy(self.beeper)]
         for route in self.routes.values():
-            row = deepcopy(template)
+            # v1/null routes keep their original presentation. Adapted entries start
+            # from a project-owned catalog row, never unknown native feature flags.
+            row = deepcopy(template if route.responses is None else self.beeper)
             for field in ("comp_hash", "availability_nux", "auto_compact_token_limit"):
                 row.pop(field, None)
             row.update(slug=route.slug, display_name=route.display_name,
@@ -106,5 +143,11 @@ class ModelRegistry:
                        default_reasoning_level=route.reasoning_efforts[0],
                        supported_reasoning_levels=[{"effort": e, "description": e}
                                                    for e in route.reasoning_efforts])
+            if route.responses is not None:
+                row.update(route.responses.catalog_fields())
+                row.update(include_skills_usage_instructions=False,
+                           include_plugin_usage_instructions=False,
+                           include_apps_usage_instructions=False,
+                           multi_agent_version="disabled", node_repl_auto_review_required=True)
             added.append(row)
         return {**deepcopy(catalog), "models": deepcopy(native) + added}

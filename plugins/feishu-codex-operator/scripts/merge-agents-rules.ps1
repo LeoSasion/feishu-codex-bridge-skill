@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'operator_installation.psm1') -Force -DisableNameChecking
 $startMarker = '<!-- FEISHU_CODEX_OPERATOR_RULES_START -->'
 $endMarker = '<!-- FEISHU_CODEX_OPERATOR_RULES_END -->'
 $resolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
@@ -104,14 +105,7 @@ if ($agentsExists) {
     Write-Output "Backed up AGENTS.md before managed-rule sync: $backupPath"
 }
 
-$temporaryPath = Join-Path $resolvedProjectRoot ('.AGENTS.md.feishu-codex-operator.' + [guid]::NewGuid().ToString('N') + '.tmp')
-try {
-    $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($temporaryPath, $merged, $utf8WithoutBom)
-    Move-Item -LiteralPath $temporaryPath -Destination $agentsPath -Force
-} finally {
-    Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
-}
+Set-OperatorManagedFile -ProjectRoot $resolvedProjectRoot -Path $agentsPath -Bytes ([Text.UTF8Encoding]::new($false).GetBytes($merged))
 
 if ($status -eq 'missing') {
     Write-Output "Appended the Feishu operator managed rules to $agentsPath"

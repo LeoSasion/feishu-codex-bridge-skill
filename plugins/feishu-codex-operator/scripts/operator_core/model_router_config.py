@@ -1,6 +1,7 @@
 """Reversible, narrowly owned Codex entry-point configuration."""
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import secrets
@@ -11,6 +12,7 @@ from urllib.parse import urlsplit
 import re
 
 from .model_registry import ModelRegistry, RouterError
+from .responses_tool_adapter import loads
 
 BEGIN = "# BEGIN FEISHU OPERATOR MODEL ROUTER\n"
 END = "# END FEISHU OPERATOR MODEL ROUTER\n"
@@ -21,7 +23,7 @@ class _NoRedirect(HTTPRedirectHandler):
         raise RouterError("lmstudio_redirect_refused")
 
 
-def lmstudio_models(api_base: str, key_env: str = "") -> list[str]:
+def lmstudio_json(api_base: str, key_env: str = "", *, native=False):
     """One bounded metadata GET; no inference, loading, download or proxy."""
     base = urlsplit(api_base)
     if (base.scheme not in {"http", "https"} or base.hostname not in {"127.0.0.1", "::1"}
@@ -38,12 +40,18 @@ def lmstudio_models(api_base: str, key_env: str = "") -> list[str]:
         if not key.strip() or any(ord(c) < 32 for c in key):
             raise RouterError("configured_api_key_unavailable")
         headers["Authorization"] = "Bearer " + key
-    request = Request(api_base.rstrip("/") + "/models", headers=headers)
+    target = (base._replace(path="/api/v1/models").geturl() if native
+              else api_base.rstrip("/") + "/models")
+    request = Request(target, headers=headers)
     with build_opener(ProxyHandler({}), _NoRedirect()).open(request, timeout=3) as response:
         raw = response.read(1048577)
     if len(raw) > 1048576:
         raise RouterError("lmstudio_catalog_too_large")
-    value = json.loads(raw)
+    return loads(raw)
+
+
+def lmstudio_models(api_base: str, key_env: str = "") -> list[str]:
+    value = lmstudio_json(api_base, key_env)
     rows = value.get("data") if isinstance(value, dict) else None
     if not isinstance(rows, list) or len(rows) > 1000:
         raise RouterError("invalid_lmstudio_catalog")
@@ -58,7 +66,7 @@ def lmstudio_models(api_base: str, key_env: str = "") -> list[str]:
 
 
 def register_lmstudio(state: Path, *, model: str, slug: str, api_base: str,
-                      key_env: str, context_window: int, efforts: list[str]):
+                      key_env: str, context_window: int, efforts: list[str], responses=None):
     """Append an explicit model, preserving existing routes. Gateway must be stopped."""
     if not slug.startswith("local/"):
         raise RouterError("lmstudio_requires_local_slug")
@@ -67,26 +75,72 @@ def register_lmstudio(state: Path, *, model: str, slug: str, api_base: str,
     row = dict(slug=slug, display_name="LM Studio: " + model, model=model,
                api_base=api_base.rstrip("/"), api_key_env=key_env,
                context_window=context_window, reasoning_efforts=efforts)
+    if responses is not None:
+        row["responses"] = responses
     catalog = json.loads(Path(__file__).with_name("beeper_model_catalog.json").read_text(encoding="utf-8"))
-    ModelRegistry({"version": 1, "models": [row]}, catalog)
+    ModelRegistry({"version": 2 if "responses" in row else 1, "models": [row]}, catalog)
     if model not in lmstudio_models(api_base, key_env):
         raise RouterError("lmstudio_model_not_listed")
+    register_route(state, row)
+
+
+def read_registration(path: Path):
+    """Bounded explicit config read; never log the contents or inspect keys."""
+    with path.open("rb") as handle:
+        data = handle.read(1048577)
+    if len(data) > 1048576:
+        raise RouterError("registration_file_too_large")
+    return loads(data)
+
+
+def register_route(state: Path, row: dict):
+    """Append only. v2 upgrades existing rows with explicit null passthrough."""
+    register_routes(state, [row])
+
+
+def register_routes(state: Path, rows: list[dict], *, expected_sha256=None):
+    """Validate and append an entire batch atomically; never change an existing row."""
+    if (state / "codex-entry.json").exists():
+        raise RouterError("deactivate_before_registration")
+    if not isinstance(rows, list) or len(rows) > 100:
+        raise RouterError("invalid_registration_batch")
+    catalog = json.loads(Path(__file__).with_name("beeper_model_catalog.json").read_text(encoding="utf-8"))
+    version = 2 if any(isinstance(row, dict) and "responses" in row for row in rows) else 1
+    if version == 2:
+        rows = [{**row, "responses": row.get("responses")} if isinstance(row, dict) else row for row in rows]
+    ModelRegistry({"version": version, "models": rows}, catalog)
     lock = state / "registry-edit.lock"
     handle = lock.open("xb")
     try:
-            target = state / "registry.json"
-            if target.is_symlink():
-                raise RouterError("registry_requires_regular_file")
-            value = json.loads(target.read_text(encoding="utf-8"))
-            ModelRegistry(value, catalog)
-            existing = next((r for r in value["models"] if r["slug"] == slug), None)
+        target = state / "registry.json"
+        if target.is_symlink():
+            raise RouterError("registry_requires_regular_file")
+        original = target.read_bytes()
+        if len(original) > 1048576:
+            raise RouterError("registration_file_too_large")
+        if expected_sha256 is not None and hashlib.sha256(original).hexdigest() != expected_sha256:
+            raise RouterError("registry_changed_since_discovery")
+        value = loads(original)
+        ModelRegistry(value, catalog)
+        if version == 2 and value["version"] == 1:
+            value = {"version": 2, "models": [{**item, "responses": None} for item in value["models"]]}
+        added = 0
+        for row in rows:
+            if value["version"] == 2 and "responses" not in row:
+                row = {**row, "responses": None}
+            existing = next((r for r in value["models"] if r["slug"] == row["slug"]), None)
             if existing == row:
-                return
+                continue
             if existing is not None:
                 raise RouterError("existing_model_registration_conflict")
             value["models"].append(row)
-            ModelRegistry(value, catalog)
+            added += 1
+        ModelRegistry(value, catalog)
+        if added:
+            if target.read_bytes() != original:
+                raise RouterError("registry_changed_during_registration")
             atomic_write(target, (json.dumps(value, ensure_ascii=True, indent=2) + "\n").encode())
+        return added
     finally:
         handle.close()
         lock.unlink()

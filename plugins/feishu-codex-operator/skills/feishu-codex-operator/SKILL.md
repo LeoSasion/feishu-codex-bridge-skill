@@ -19,8 +19,13 @@ description: Configure, install, diagnose, and develop Feishu Codex Operator, th
   不得以目录可见性代替路由证据，也不能替换原生 provider/catalog 条目而影响 Spark/Luna。
   可选 Python Responses 路由器仅追加目录项，原生请求仍送原生后端；不依赖
   LiteLLM，不转换 Chat Completions。涉及此功能先读 `../../references/model-router.md`。
+  registry v2 按明确能力适配外部工具，v1/null 保留透传；代码与调用 ID 不改写，
+  工具调用仅在成功终态完整校验后交付。探测、隔离 CLI 执行和真实 Desktop 验收分别记录。
+  能力复用、注册前检查和多轮评测再读 `../../references/responses-acceptance.md`；
+  私有 profile/receipt 不随发布复制。只读补丁计划与实际文件写入审批分开验收。
   全局入口启用与安装分开；常驻生命周期、原生辅助工具及真实 Desktop 下拉/默认值
   尚未验收，不能根据隔离测试自动启用。
+  此处“全局入口”指模型请求路由；可恢复的桌面/开始菜单快捷方式初始化不代表启用模型路由。
   本地 provider 失败或不确定时不兜底。
   所有 Operator 添加给 Spark 的外层指令、内层回调/附件说明
   均用简洁结构化英文，飞书原句不翻译。附件元数据用无损 JSON 转义，不改真实路径。
@@ -38,6 +43,11 @@ description: Configure, install, diagnose, and develop Feishu Codex Operator, th
   [Beeper E2E lessons](../../references/beeper-e2e-lessons.md)。保留失败样本，不重放；
   成功必须是同一飞书消息经 Final Callback 收到精确关联回复，不能用 Desktop 输出替代。
 - 安装、迁移或升级：读 [README](../../README.md) 和 [Upgrade](../../upgrade-operator.md)。
+- 初始化入口或卸载：读 [Installation and removal](../../references/installation-and-removal.md)。
+  首次写入前说明入口改动、原件备份、任务栏手动固定和安全卸载顺序。初始化请求已覆盖
+  说明后的当前用户入口配置，不重复索要许可；不自动启用未经配置的模型路由。
+  用户要求移除插件时，先预览并执行项目安全卸载，成功后才移除 Desktop 插件。
+  不把 Desktop 直接删除插件说成自动恢复，不覆盖后续用户修改，也不伪造旧安装原件记录。
 - Hook 审核：读 [Permissions and Hooks](../../references/permissions-and-hooks.md)。
   首选 Desktop“设置 → 钩子”；Desktop 没有 `/hooks`，Windows CMD 启动 CLI 的动态路径命令仅作备选。
 - 命名变更：读 [Terminology](../../references/terminology.md)。新执行面只用 Operator，

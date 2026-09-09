@@ -45,6 +45,102 @@
   activation is never an automatic install step. Persistent lifecycle, native
   auxiliary-tool compatibility and live Desktop picker/default verification remain
   required before global activation; isolated tests alone are insufficient.
+  Registry v2 may explicitly adapt external Responses tools using per-endpoint
+  capabilities. Preserve v1/null passthrough, native traffic and local Beeper.
+  The adapter only converts protocol data; Desktop retains tool execution and
+  permissions. Preserve tool source and call identities; reject unknown tools,
+  unsupported grammar, opaque history and incomplete calls without repair or
+  retry. Release executable calls only after a consistent successful terminal.
+  Compare observed streamed text parts with their terminal snapshots before
+  releasing buffered tools; preserve whitespace and reject contradictions without
+  trimming, reconstruction or retry. Verification reports retain CLI and Desktop
+  failures separately and together, distinguishing failed, missing and stale gates.
+  Content parts follow their owning message or reasoning item; reasoning_text
+  parts remain distinct from output_text and refusal, with no content conversion.
+  New isolated CLI cases may explicitly select marker_line_v1 for bounded LF/CRLF
+  lines around the synthetic report only. Preserve raw text, exact comparison,
+  tool/file checks and per-case policy; never reclassify old failures or infer
+  Desktop acceptance from this formatting compatibility.
+  Current Codex named function results may legitimately omit call_id. A dated,
+  explicit codec may encode only the registered codex_app.send_message_to_thread
+  source as labelled user-message JSON, preserving the entire original object,
+  text parts, absent/null identities and order. This is an explicit role/format
+  representation, never a reconstructed call, authentication, system/developer
+  instruction, new tool permission, XML extraction, execution or retry.
+  Ordinary paired calls/results remain strict; opaque/nontext named results and
+  unknown sources remain rejected. Endpoint and live Desktop checks are separate.
+  Explicit text-only result serialization preserves every part and boundary;
+  never flatten images or drop content. Reasoning-specific tool-choice profiles
+  are checked before sending. Parallel permission may be narrowed to a supported
+  single call, never widened beyond the caller's constraint.
+  Synthetic provider probes and isolated CLI execution are distinct evidence;
+  neither satisfies live Desktop/global-entry acceptance by itself.
+  Desktop verification is a separate read-only review of private dated evidence.
+  Bind model identity, endpoint contract, adapter/verifier and CLI/Desktop versions;
+  reject stale, ambiguous or altered evidence and keep prior failures visible.
+  Reviewed assertions are not attestation. Guided cases cannot establish fresh-context
+  acceptance; an assistant claim cannot prove approval or denial. Verification reports
+  never modify catalogs, permissions, services or routing, and never imply global readiness.
+  A separate explicit stopped label transaction may update only one selected adapted
+  model display name after re-reading its current evidence. It must reserve the inactive
+  router port, verify the exact Operator stopped and callbacks empty,
+  require the preview registry digest, retain an original backup and write atomically.
+  It never starts services, refreshes the live UI, broadens capabilities or activates routing.
+  Private capability profiles bind the explicit endpoint/model contract and
+  adapter revision to dated case outcomes; they are not live attestation.
+  Preflight/readiness perform no inference or configuration mutation.
+  Isolated CLI evaluation keeps approval checks and zero retries. A read-only
+  patch preview never proves actual file-write approval. Keep profiles and
+  receipts private. Timing records contain fixed stages/counts only.
+  Router restart is explicit, deactivated and request-free; never replay.
+  Owner-selected LM Studio startup discovery may append all listed chat models
+  under one explicit private Responses policy. Metadata is not capability or
+  Desktop acceptance. Exclude embeddings and known dedicated auxiliary draft
+  architectures such as gemma4-assistant. Do not infer auxiliary status from
+  small size, a display name or a main model having speculative decoding enabled.
+  Report already-registered auxiliary rows for separate stopped cleanup; discovery
+  never deletes them. Preserve existing rows and defaults,
+  mark new rows unverified, and commit the validated batch atomically only
+  with the owned entry deactivated, exact router/Operator
+  stopped and callbacks empty. Never load, download, infer, transfer receipts,
+  delete missing models or change approvals during discovery. First initialization
+  must explain current-user Desktop/Start menu shortcut changes, original-file
+  retention, taskbar limitations and the safe uninstall sequence before writing.
+  An owner-requested initialization may then configure those entry points without
+  another prompt. It does not activate global routing or infer a local-model
+  policy. Preserve a journal before changing integrations; repeated upgrades
+  retain the first original, and restoration verifies current fingerprints,
+  backups and exact paths before changing files. Later user edits, linked paths
+  or ambiguous ownership stop recovery without overwriting them.
+  Safe uninstall first detaches the exact owned request-free router and callback
+  registration, then restores managed entry/Hook/rule files and archives runtime
+  data. Keep a standalone native launcher for otherwise unobservable taskbar pins.
+  Preserve task history, model weights, credentials, unrelated settings and data.
+  Do not claim that removing the Desktop plugin automatically runs this recovery;
+  complete project recovery before plugin removal. Legacy installations require
+  separately reviewed ownership evidence, never a fabricated first-install record.
+  Desktop closure is not a policy prerequisite for model registry edits,
+  including discovery, auxiliary cleanup and display-name updates. Preserve
+  the applicable backup, digest, atomic-write and service lifecycle checks.
+  Any remaining restart or refresh requirement must be established from the
+  implementation and observed behavior, not inferred from this project rule.
+  An explicit registry reload may publish one validated, digest-bound in-memory
+  registry while Desktop and the router remain running. It does not authorize
+  registry-file edits, model discovery, service control or permission changes.
+  Use no polling or per-request file checks; bound reads to 1 MiB off the event
+  loop and changed-version attempts to one per 30 seconds. Same-version requests
+  are no-ops without disk I/O; concurrent, failed or uncertain attempts never retry.
+  Existing requests and entire WebSocket connections retain their original
+  registry snapshots. New requests see the new registry; Desktop catalog refresh
+  remains separate evidence. Initial deployment into an older router still
+  requires an explicit request-free router restart.
+  Native Responses HTTP wire and decompressed input are bounded to 64 MiB.
+  External/Beeper HTTP input, native auxiliary input and existing WebSocket
+  limits remain 16 MiB. Preserve native bytes and encoding headers; never
+  truncate input, remove attachments or replay a failed request to fit a bound.
+  Local HTTP size rejection reports 413 with a fixed code, scope and limit;
+  preserve upstream 413 responses distinctly. These are transport limits,
+  not model context allowances or guarantees of upstream acceptance.
   Operator starts one loopback-only Responses API
   listener only when `beeper` is selected and passes its provider/catalog
   settings only to that Beeper queue. It never modifies global Codex config.

@@ -11,6 +11,47 @@ from operator_core.model_registry import RouterError
 
 
 class RouterConfigTests(unittest.TestCase):
+    def test_v2_append_preserves_legacy_routes_and_refuses_replacement(self):
+        from test_responses_tools import ROUTE
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            config.initialize(state)
+            old = {k: v for k, v in ROUTE.items() if k != "responses"}
+            config.register_route(state, old)
+            adapted = {**ROUTE, "slug": "api/adapted"}
+            config.register_route(state, adapted)
+            value = json.loads((state / "registry.json").read_text())
+            self.assertEqual(value["version"], 2)
+            self.assertEqual(value["models"], [{**old, "responses": None}, adapted])
+            before = (state / "registry.json").read_bytes()
+            config.register_route(state, old)
+            config.register_route(state, adapted)
+            self.assertEqual(before, (state / "registry.json").read_bytes())
+            with self.assertRaises(RouterError):
+                config.register_route(state, {**adapted, "model": "different"})
+            self.assertEqual(before, (state / "registry.json").read_bytes())
+
+    def test_lmstudio_can_explicitly_append_v2_capabilities(self):
+        from test_responses_tools import CAPABILITIES
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            config.initialize(state)
+            with patch.object(config, "lmstudio_models", return_value=["fixture"]):
+                config.register_lmstudio(state, model="fixture", slug="local/fixture",
+                    api_base="http://127.0.0.1:1234/v1", key_env="", context_window=8192,
+                    efforts=["low"], responses=CAPABILITIES)
+            value = json.loads((state / "registry.json").read_text())
+            self.assertEqual(value["version"], 2)
+            self.assertEqual(value["models"][0]["responses"], CAPABILITIES)
+
+    def test_registration_file_is_bounded_and_duplicate_keys_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "registration.json"
+            for data in (b'{"model":"one","model":"two"}', b"x" * 1048577):
+                path.write_bytes(data)
+                with self.assertRaises(RouterError):
+                    config.read_registration(path)
+
     def test_lmstudio_refuses_non_loopback_and_credential_urls(self):
         for base in ("https://example.com/v1", "http://localhost/v1", "http://user@127.0.0.1/v1",
                      "http://127.0.0.1/v1?key=secret", "http://127.0.0.1/chat/completions"):

@@ -15,7 +15,7 @@ class ConfigTests(unittest.TestCase):
     def test_minimal_relay_defaults(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = load_config()
-        self.assertEqual("4.2.0-alpha.96", OPERATOR_VERSION)
+        self.assertEqual("4.2.0-alpha.116", OPERATOR_VERSION)
         self.assertEqual(300, config.unknown_status_timeout_seconds)
         self.assertEqual(20, config.callback_grace_seconds)
         self.assertEqual(168, config.callback_retention_hours)
@@ -130,6 +130,8 @@ class ConfigTests(unittest.TestCase):
                 self.assertIn("operator_core/responder_observer.py", normalized)
                 self.assertIn("operator_core/beeper_provider.py", normalized)
                 self.assertIn("operator_core/beeper_model_catalog.json", normalized)
+                self.assertIn("operator_core/responses_verification.py", normalized)
+                self.assertIn("operator_core/responses_labels.py", normalized)
 
     def test_status_exposes_only_the_sanitized_rate_limit_summary(self) -> None:
         text = (ROOT / "scripts" / "feishu-codex-operator.ps1").read_text(
