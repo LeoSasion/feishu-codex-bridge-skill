@@ -112,8 +112,57 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertEqual(external["multi_agent_version"], "disabled")
         self.assertNotIn("comp_hash", external)
 
+        for mode, custom, expected_patch in (
+                ("code_mode_only", {"exec": "wrap"}, "freeform"),
+                ("standard", {}, None), ("standard", {"exec": "wrap"}, None),
+                ("standard", {"apply_patch": "native"}, "freeform")):
+            row = deepcopy(ROUTE)
+            row["responses"].update(codex_tool_mode=mode, custom_tools=custom)
+            selected = ModelRegistry({"version": 2, "models": [row]}, BEEPER).merge(native)
+            with self.subTest(mode=mode, custom=custom):
+                self.assertEqual(selected["models"][-1]["apply_patch_tool_type"], expected_patch)
+                self.assertEqual(selected["models"][0], native["models"][0])
+                self.assertEqual(selected["models"][1], BEEPER["models"][0])
+
 
 class ToolAdapterTests(unittest.TestCase):
+    def test_history_argument_limit_applies_after_json_encoding(self):
+        maximum = 2 * 1024 * 1024
+        # Each literal backslash becomes two bytes on the function wire.
+        exact = "\\" * ((maximum - len('{"input":""}')) // 2)
+        for source, accepted in ((exact, True), (exact + "\\", False)):
+            encoded = json.dumps({"input": source}, ensure_ascii=False, separators=(",", ":"))
+            self.assertEqual(len(encoded.encode()), maximum + (0 if accepted else 2))
+            for mode in ("wrapped", "history_only", "search", "native"):
+                with self.subTest(accepted=accepted, mode=mode):
+                    caps = {}
+                    tools = [EXEC]
+                    item = {"type": "custom_tool_call", "call_id": "bound", "name": "exec", "input": source}
+                    result = {"type": "custom_tool_call_output", "call_id": "bound", "output": "synthetic"}
+                    if mode == "history_only":
+                        tools = []
+                        caps = {"history_custom_tools": {"exec": "codex_exec_v1"}}
+                    elif mode == "search":
+                        tools = [{"type": "tool_search", "execution": "client", "parameters": {"type": "object"}}]
+                        item = {"type": "tool_search_call", "call_id": "bound", "execution": "client",
+                                "arguments": {"input": source}}
+                        result = {"type": "tool_search_output", "call_id": "bound", "execution": "client",
+                                  "status": "completed", "tools": []}
+                    elif mode == "native":
+                        caps = {"custom_tools": {"exec": "native"}}
+                    payload = {"tools": tools, "input": [item, result]}
+                    before = deepcopy(payload)
+                    if accepted or mode == "native":
+                        wire, _ = prepare(payload, **caps)
+                        if mode == "native":
+                            self.assertEqual(wire["input"][0]["input"], source)
+                        else:
+                            self.assertEqual(wire["input"][0]["arguments"], encoded)
+                    else:
+                        with self.assertRaisesRegex(RouterError, "^protocol_string_too_large$"):
+                            prepare(payload, **caps)
+                    self.assertEqual(payload, before)
+
     def test_reasoning_nullable_content_and_text_variants_are_preserved(self):
         for fields in ({}, {"content": None}, {"content": []},
                        {"content": [{"type": "reasoning_text", "text": "\r\n中文😀  ", "keep": 1}]},
@@ -499,6 +548,14 @@ class ToolAdapterTests(unittest.TestCase):
         for arguments in bad_arguments:
             with self.subTest(arguments=arguments), self.assertRaises(UpstreamProtocolError):
                 restore_response(response({**good, "arguments": arguments}), context)
+        for args in ({"cmd": "PRIVATE_SOURCE"}, {"input": "PRIVATE_SOURCE", "PRIVATE_KEY": "PRIVATE_VALUE"}, {}):
+            with self.subTest(fields=len(args)), self.assertRaises(UpstreamProtocolError) as rejected:
+                restore_response(response({**good, "arguments": dumps(args)}), context)
+            shape = rejected.exception.response_state["wrapper_shape"]
+            self.assertEqual(shape, {"field_count": len(args), **{
+                "has_" + key: key in args for key in
+                ("input", "code", "source", "cmd", "command", "arguments", "action")}})
+            self.assertNotIn("PRIVATE", dumps(rejected.exception.response_state))
         for items in ([good, good], [{**good, "name": "unknown"}],
                       [good, {**good, "id": "new"}], [{**good, "status": "in_progress"}]):
             with self.assertRaises(UpstreamProtocolError):

@@ -141,7 +141,7 @@ def fixture_main(root, case):
         send({"jsonrpc": "2.0", "id": request["id"], "result": result})
 
 
-def prompt_for(case, final_text_policy="exact"):
+def prompt_for(case, final_text_policy="exact", *, codex_tool_mode="code_mode_only"):
     if final_text_policy not in FINAL_TEXT_POLICIES:
         raise RouterError("invalid_final_text_policy")
     common = ('Bounded synthetic evaluation. Use exec to call the MCP tool whose name ends with '
@@ -149,6 +149,12 @@ def prompt_for(case, final_text_policy="exact"):
               'then call tools[t.name](arguments) and text the result. Use no other tools. '
               'Perform exactly ONE fixture operation per exec; wait for each tool result before deciding '
               'the next operation. ')
+    if codex_tool_mode == "standard":
+        common = ('Bounded synthetic evaluation. Call the registered MCP fixture_step tool directly. '
+                  'Use no exec, shell, file, search or other tools. Perform exactly one fixture operation '
+                  'per call and wait for its result. ')
+    elif codex_tool_mode != "code_mode_only":
+        raise RouterError("invalid_evaluation_tool_mode")
     instructions = {
         "cli_nested": 'Call {action:"add", left:17, right:25}.',
         "cli_multiround": 'First call {action:"challenge"}. Read its returned challenge value, '
@@ -292,6 +298,7 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             return value
 
     router = EvaluationRouter(ModelRegistry({"version": 2, "models": [row]}, catalog), secrets.token_hex(32))
+    tool_mode = router.registry.routes[row["slug"]].responses.codex_tool_mode
     admitted = asyncio.Event()
     request_times = []
     requests, active, limit = 0, 0, {"cli_nested": 2, "cli_multiround": 3,
@@ -321,7 +328,7 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
     await web.TCPSite(runner, "127.0.0.1", 0).start()
     child, temporary, communication, begin = None, None, None, time.perf_counter()
     report = {"case": case, "status": "failed", "synthetic_only": True, "cli_version": version,
-              "final_text_policy": final_text_policy,
+              "final_text_policy": final_text_policy, "codex_tool_mode": tool_mode,
               "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "contract_sha256": contract_digest(row), "adapter_sha256": adapter_digest(),
               "evaluator_sha256": evaluator_digest(),
@@ -355,7 +362,7 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
                    "--output-last-message", str(final_file)]
         for key, value in settings.items():
             command += ["-c", key + "=" + dumps(value)]
-        command.append(prompt_for(case, final_text_policy))
+        command.append(prompt_for(case, final_text_policy, codex_tool_mode=tool_mode))
         child = await asyncio.create_subprocess_exec(*command, cwd=str(work), env=isolated_environment(home),
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             creationflags=0x08000000 if os.name == "nt" else 0)

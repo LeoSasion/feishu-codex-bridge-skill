@@ -1,6 +1,6 @@
 # Feishu Codex Operator
 
-Published plugin: `1.1.0`; development source runtime: `4.2.0-alpha.124`. Operator（接线员）maps each Feishu private
+Published plugin: `1.1.0`; development source runtime: `4.2.0-alpha.125`. Operator（接线员）maps each Feishu private
 chat, group, or topic to one existing Codex Desktop task.
 
 Local-model CLI evaluation supports explicit `--final-text-policy marker_line_v1`

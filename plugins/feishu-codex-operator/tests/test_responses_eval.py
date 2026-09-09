@@ -11,7 +11,7 @@ from unittest.mock import patch
 from test_responses_tools import ROUTE
 from test_responses_events import events_for, wire
 from operator_responses_eval import EXPECTED, SOURCE, STOP_CASES, Fixture, evaluate, isolated_environment, verify_final_message, prompt_for, json_output_summary
-from operator_core.responses_tool_adapter import dumps
+from operator_core.responses_tool_adapter import dumps, tool_alias
 
 
 class EvalFixtureTests(unittest.TestCase):
@@ -138,6 +138,7 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
         # permissive format policy so whitespace compatibility cannot mask it.
         cases += [("cli_exit_stop", "leading_lf", policy) for policy in ("exact", "marker_line_v1")]
         cases += [("cli_exit_stop", behavior, "marker_line_v1") for behavior in ("retry", "omit_error", "extra_round")]
+        cases.append(("cli_tool_error", "standard", "exact"))
         for case, behavior, policy in cases:
             with self.subTest(case=case, behavior=behavior, policy=policy):
                 received = []
@@ -164,6 +165,13 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                             code += ' text(await tools[t.name]({action:"fail"}));'
                         item = {"id": "fc_" + str(count), "type": "function_call", "call_id": "call_" + str(count),
                                 "name": "exec", "status": "completed", "arguments": dumps({"input": code})}
+                        if behavior == "standard":
+                            names = [tool["name"] for tool in body["tools"]
+                                     if tool["type"] == "function" and tool["name"] ==
+                                     tool_alias("function", "mcp__operator_fixture", "fixture_step")]
+                            self.assertEqual(len(names), 1)
+                            self.assertTrue(all(tool["type"] == "function" for tool in body["tools"]))
+                            item.update(name=names[0], arguments=dumps(operations[count]))
                     else:
                         import re
                         marker = re.search(r"OPERATOR_EVAL_[a-f0-9]{16}", dumps(previous[-1]["output"])).group()
@@ -196,11 +204,14 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                 row = deepcopy(ROUTE)
                 row.update(api_base=str(server.make_url("/v1")), reasoning_efforts=["low"])
                 row["responses"].update(parallel_tool_calls=False, text_tool_outputs="json_string")
+                if behavior == "standard":
+                    row["responses"].update(codex_tool_mode="standard", custom_tools={})
                 if behavior == "extra_round":
                     row["responses"]["upstream_response_mode"] = "json"
                 try:
                     report = await evaluate(row, case, Path(os.environ["CODEX_OPERATOR_TEST_CLI"]), final_text_policy=policy)
-                    accepted = behavior == "correct" or (policy == "marker_line_v1" and behavior == "leading_lf")
+                    accepted = behavior in {"correct", "standard"} or (policy == "marker_line_v1" and behavior == "leading_lf")
+                    self.assertEqual(report["codex_tool_mode"], "standard" if behavior == "standard" else "code_mode_only")
                     self.assertEqual(report["status"], "passed" if accepted else "failed", {"report": report, "synthetic_outputs": [
                         item["output"] for body in received for item in body["input"]
                         if item.get("type") == "function_call_output"]})

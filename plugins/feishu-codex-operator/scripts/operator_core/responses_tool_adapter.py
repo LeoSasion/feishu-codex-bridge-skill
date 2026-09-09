@@ -459,12 +459,17 @@ def _history(payload, context):
                 spec.check_input(item.get("input"))
                 if spec.upstream_type == "function":
                     entry.pop("input")
-                    entry.update(type="function_call", arguments=dumps({"input": item["input"]}))
+                    # Encoding source-language backslashes may grow the wire
+                    # arguments beyond the raw custom-input bound. Reject before
+                    # dispatch; never truncate or reinterpret the original source.
+                    entry.update(type="function_call", arguments=bounded_string(
+                        dumps({"input": item["input"]}), field="function_call.arguments"))
             elif spec.kind == "tool_search":
                 if item.get("execution") != "client" or not isinstance(item.get("arguments"), dict):
                     raise RouterError("invalid_tool_search_history")
                 entry.pop("execution")
-                entry.update(type="function_call", arguments=dumps(item["arguments"]))
+                entry.update(type="function_call", arguments=bounded_string(
+                    dumps(item["arguments"]), field="function_call.arguments"))
             else:
                 if not isinstance(loads(bounded_string(item.get("arguments"), field="function_call.arguments")), dict):
                     raise RouterError("function_arguments_must_be_object")
@@ -635,7 +640,13 @@ def restore_item(item, context):
             raise RouterError("function_arguments_must_be_object")
         if spec.kind == "custom":
             if set(arguments) != {"input"}:
-                raise RouterError("custom_wrapper_requires_exact_input")
+                error = RouterError("custom_wrapper_requires_exact_input")
+                # Fixed shape flags only. Never retain arbitrary argument keys,
+                # source, values or an inferred replacement for the missing field.
+                error.wrapper_shape = {"field_count": len(arguments), **{
+                    "has_" + key: key in arguments for key in
+                    ("input", "code", "source", "cmd", "command", "arguments", "action")}}
+                raise error
             entry.pop("arguments")
             entry.update(type="custom_tool_call", input=spec.check_input(arguments["input"]))
         elif spec.kind == "tool_search":
@@ -708,4 +719,6 @@ def restore_response(response, context):
                 "has_incomplete_details": response.get("incomplete_details") is not None,
                 "output_tokens": tokens if type(tokens) is int and 0 <= tokens <= 10000000 else None,
             }
+            if isinstance(exc, RouterError) and hasattr(exc, "wrapper_shape"):
+                error.response_state["wrapper_shape"] = exc.wrapper_shape
         raise error from exc

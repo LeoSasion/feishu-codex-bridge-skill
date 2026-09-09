@@ -69,3 +69,11 @@ Alpha.124 在现有 probe 往返用例中加入 JSON 字符串/参数对象与 L
 暂停的 Desktop 搜索方向仍仅保留设计记录。历史失败不因测试合并而改判，必要恢复
 原件和验收证据也不作为重复测试删除。精简结果和后续验证见
 [发布审计](../references/release-audit.md)。
+
+Alpha.125 adds two behavioral methods for encoded-history argument bounds and
+HTTP/WS rejection before dispatch. Existing catalog and invalid-output checks
+cover the standard-function patch declaration and fixed shape diagnostics. One
+standard-function scenario extends the real CLI evaluation table, bringing the
+CLI scenario count from 13 to 14 without duplicating the existing exec cases.
+The experimental line-array codec was removed after live failures and contributes
+no test methods or runtime capability to the canonical suite.

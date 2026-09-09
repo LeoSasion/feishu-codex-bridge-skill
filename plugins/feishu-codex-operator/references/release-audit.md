@@ -10,6 +10,35 @@ model selection, wake lease, lifecycle waiting, metadata-only requests,
 and App Server child cleanup. Run both while the exact installed service is
 stopped and no callback is pending. Neither proves live Feishu delivery.
 
+## Alpha.125 development validation (2026-09-10, unpublished)
+
+Full isolated regression passed 418 methods in 69.066 seconds. All four opt-in
+CLI methods ran using current official CLI 0.153.4; only the two Windows symlink
+subcases requiring privilege 1314 were skipped. The real CLI table now includes
+one standard-function scenario alongside the existing exec cases (14 scenarios
+total). Exact Operator absence and zero pending callbacks were verified first.
+The 107-file package inventory, Python/PowerShell syntax, byte-identical rule
+mirror and 27 local documentation links/anchors passed their read-only checks.
+The installed manifest remains alpha.123 and its registry digest is unchanged.
+
+Two new methods cover actual JSON-encoded argument bounds and HTTP/WS rejection
+before any upstream dispatch. The encoded-history test first reproduced all three
+missing checks: declared custom wrapping, history-only custom wrapping, and client
+tool-search conversion. Each now accepts the exact 2 MiB boundary and rejects
+expansion without source changes. Existing checks cover fixed wrapper diagnostics,
+standard patch-tool catalog behavior, unchanged native/Beeper entries, and direct
+MCP result consumption. No line-array codec or qualified-name option remains in
+canonical source.
+
+Online exploration and its failures are recorded separately in
+[official online models](official-online-models.md#alpha125-standard-function-investigation-2026-09-10-unpublished).
+The standard-function DeepSeek route has useful isolated evidence, but the private
+prototype and canonical evaluator receipts are version-distinct. GLM's late
+cancellation attempt remains failed rather than being converted into a pass.
+High-effort opaque history remains rejected; the proposed limited exception has
+not been authorized or implemented. No live registry, runtime, service, entry,
+permission or default-model change was made.
+
 ## Alpha.124 development validation (2026-09-10, unpublished)
 
 Full isolated regression passed 416 methods in 67.454 seconds. All four opt-in

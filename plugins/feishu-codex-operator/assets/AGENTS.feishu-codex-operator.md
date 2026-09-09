@@ -104,6 +104,14 @@
   Unfinished historical calls and unsuccessful tool-search outputs are rejected;
   they never enable tools or cause retries. This codec is not a general Responses
   Lite implementation or hosted-search executor; native/v1/null routes stay opaque.
+  An explicitly selected standard tool mode advertises no freeform patch tool
+  unless that custom tool is registered. Preserve code-mode, explicitly registered
+  patch tools, native/v1/null and local Beeper catalog behavior. Isolated CLI
+  evaluation follows the registered tool mode and records it; direct function
+  evidence never establishes exec wrapping or its source-copying fidelity.
+  JSON-encoded historical function arguments retain their 2 MiB bound after
+  custom-input or tool-search serialization. Reject expansion before dispatch;
+  never truncate, normalize source or replay to fit.
   Synthetic provider probes and isolated CLI execution are distinct evidence;
   neither satisfies live Desktop/global-entry acceptance by itself.
   Desktop verification is a separate read-only review of private dated evidence.

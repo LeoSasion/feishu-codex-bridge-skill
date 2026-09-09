@@ -205,10 +205,16 @@ class ResponsesCapabilities:
 
     def catalog_fields(self):
         """Use an explicit presentation; do not inherit native model features."""
-        return dict(input_modalities=list(self.input_modalities),
+        fields = dict(input_modalities=list(self.input_modalities),
                     support_verbosity=self.text_verbosity,
                     default_reasoning_summary="auto" if self.reasoning_summary else "none",
                     supports_parallel_tool_calls=self.parallel_tool_calls,
                     tool_mode=None if self.codex_tool_mode == "standard" else "code_mode_only",
                     node_repl_disabled=self.codex_tool_mode != "code_mode_only",
                     prefer_websockets=False)
+        if self.codex_tool_mode == "standard" and self.custom_mode("apply_patch") is None:
+            # The base catalog has freeform apply_patch. A standard function-only
+            # contract must not advertise that unregistered custom tool. Code-mode
+            # tool availability and explicitly registered patch tools are unchanged.
+            fields["apply_patch_tool_type"] = None
+        return fields

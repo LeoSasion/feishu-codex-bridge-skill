@@ -425,6 +425,21 @@ class AdaptedRouterTests(unittest.IsolatedAsyncioTestCase):
             await ws.close()
         self.assertEqual(self.received, [])
 
+    async def test_json_expanded_history_is_rejected_before_http_or_ws_dispatch(self):
+        source = "\\" * (1024 * 1024)
+        payload = {**self.payload, "input": [
+            {"type": "custom_tool_call", "call_id": "bound", "name": "exec", "input": source},
+            {"type": "custom_tool_call_output", "call_id": "bound", "output": "synthetic"}]}
+        for stream in (False, True):
+            reply = await self.client.post(self.endpoint, json={**payload, "stream": stream})
+            self.assertEqual(reply.status, 400)
+            self.assertEqual((await reply.json())["error"]["message"], "protocol_string_too_large")
+        ws = await self.client.ws_connect(self.endpoint)
+        await ws.send_json({**payload, "type": "response.create"})
+        self.assertEqual((await ws.receive(timeout=2)).type, aiohttp.WSMsgType.CLOSE)
+        await ws.close()
+        self.assertEqual(self.received, [])
+
     async def test_input_tools_failed_streams_never_release_executable_calls(self):
         self.enable_input_tools()
         body = {"model": ROUTE["slug"], "stream": True, "input": [

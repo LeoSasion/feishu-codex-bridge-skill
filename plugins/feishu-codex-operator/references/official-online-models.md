@@ -3,9 +3,10 @@
 These explicit registrations are development candidates for the existing
 Responses adapter. They are packaged source assets, never automatically copied
 into the installed registry, activated by installation, or advertised as Desktop
-acceptance. The registrations retain their alpha.122 endpoint contracts;
-development source alpha.124 clarifies wrapped-tool argument escaping and extends
-the probe diagnostics described below. It does not change candidate defaults.
+acceptance. The registrations retain their alpha.122 endpoint contracts.
+Development source alpha.125 supports the explicit standard-function evaluation
+described below, fixes its patch-tool catalog declaration, and bounds JSON-encoded
+history arguments. Candidate defaults and the installed registry remain unchanged.
 
 | Candidate | Official Responses base | Key environment variable | Effort |
 | --- | --- | --- | --- |
@@ -190,3 +191,81 @@ existing or user-required CRLF policy and verify it exactly. Model-generated cod
 must not be repaired, re-executed or declared correct merely because it ran.
 Full current CLI and Desktop acceptance remain incomplete. The installed
 alpha.123 runtime and both live candidate registrations were left unchanged.
+
+## Alpha.125 standard-function investigation (2026-09-10, unpublished)
+
+CC Switch's native tool catalogs suggested a second approach to the unstable
+custom `exec` wrapper: expose ordinary function tools directly. This is still the
+explicit Responses adapter, with source/call identity checks and successful
+terminal validation. It uses neither Chat Completions conversion nor an opaque
+history bypass. The reference is the pinned
+[CC Switch catalog implementation](https://github.com/farion1231/cc-switch/blob/2d54e261c8a2f9e5b791e566c83048796bb2364b/src-tauri/src/codex_config.rs#L2027).
+Its GLM presets do not establish Flash compatibility. DeepSeek's
+[Responses tool table](https://api-docs.deepseek.com/guides/responses_api/)
+only supports the custom name `apply_patch`; it does not permit sending a native
+custom `exec` under an arbitrary alias.
+
+The standard-function trial retains the exact DeepSeek endpoint, model and none
+effort, with these explicitly selected capability fields:
+
+```json
+{
+  "codex_tool_mode": "standard",
+  "custom_tools": {},
+  "history_custom_tools": {}
+}
+```
+
+These are changes to a complete registration's `responses` object, not a complete
+registration or an instruction to mutate a running model. Use a fresh isolated
+context: this contract does not admit old custom-call history. The existing
+code-mode candidate and its failed receipts remain separate.
+
+Alpha.125 fixes the standard catalog inheriting Beeper's freeform patch declaration
+when no `apply_patch` custom tool is registered. Such a standard entry now sets
+`apply_patch_tool_type` to null. Explicit patch registrations, code-mode entries,
+Beeper and native/v1/null catalog behavior remain unchanged. Standard CLI cases
+call the registered fixture function directly and record `codex_tool_mode`;
+code-mode cases continue through exec. Neither route executes tools in the router.
+A direct-function result does not establish raw exec source-copying fidelity.
+
+The investigation produced these distinct observations, all from separately
+reserved synthetic runs with zero retries:
+
+| Contract / investigation | Result |
+| --- | --- |
+| Experimental line-array source codec | Both CRLF probes failed. DeepSeek's workspace case also failed before any tool operation; GLM's workspace case passed. The codec was removed from canonical source; private patch and failures retained. |
+| Existing DeepSeek code-mode contract | New exit-stop and error-recovery cases failed before any fixture operation. The latter returned one `cmd` field instead of the declared `input`. |
+| Private qualified tool-name experiment | DeepSeek exit-stop passed; recovery returned empty arguments and CRLF copying failed. The experiment was not promoted to a capability or candidate. |
+| Private standard-function prototype, DeepSeek none | Error recovery and disposable file modification passed, including exact final answers and exact file bytes. These receipts bind the private prototype and are not canonical-adapter acceptance. |
+| Canonical standard-function evaluator, DeepSeek none | Nested function call, multi-round result consumption, both stop cases, read-only patch preview and cancellation passed. |
+| Existing GLM code-mode contract / low | New nonzero-exit stop, error recovery and read-only patch preview passed. Cancellation remained failed because the response had already completed before the cancel attempt. |
+
+The GLM cancellation receipt shows one completed router request, zero cancelled
+router requests and no router failure. An inactive request after child termination
+is insufficient cancellation evidence; the evaluator kept the case failed.
+It does not demonstrate a broken disconnect handler. Loopback HTTP and WebSocket
+cancellation remain independently covered. Patch preview never proves file-write
+approval; fixture-only file modification is not Desktop approval evidence.
+
+Two direct no-tool DeepSeek high-effort observations returned a nonempty
+`encrypted_content` string in a reasoning item. Only fixed types, sizes and
+comparison flags were retained, never the state or reasoning text. A separate
+native v2/null CLI trial completed its first synthetic MCP operation, then failed
+at the existing opaque-history check before a second upstream request. Switching
+to native routing cannot bypass this rule. A same-endpoint/model signed-state
+proposal is awaiting explicit owner authorization; no such exception is implemented
+or activated. High effort is still not admitted by either live candidate.
+
+A separate confirmed defect affected wrapped custom history and client tool-search
+history: raw input could fit within 2 MiB while its serialized function arguments
+exceeded that bound. Alpha.125 checks the actual encoded arguments before dispatch,
+including history-only custom mappings. It never truncates or normalizes the source.
+Wrong-wrapper diagnostics now retain only a field count and fixed known-field
+presence flags, not arbitrary keys, values or inferred replacement arguments.
+
+These developmental reports span adapter/evaluator revisions. They do not form one
+uniform-version capability profile or override prior failures. Exact CRLF source
+copying, high-effort history and fresh Desktop acceptance remain unresolved. The
+installed alpha.123 runtime, both live registrations and the default model have not
+been changed by this investigation.
