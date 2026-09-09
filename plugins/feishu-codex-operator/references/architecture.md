@@ -13,14 +13,15 @@ scope -> exact Responder task UUID
         |
         v
 shared account + Spark quota cache -> optional account/rateLimits/read refresh
+        |      configured Spark bucket exhausted -> select Luna/low before queue
         |
         v
 open public request_id callback route
         |
         v
-codex.exe queue --thread fixed-Beeper-UUID --model Spark-or-Luna --config model-policy
+codex.exe queue --thread fixed-Beeper-UUID --model selected-Beeper-model --config model-policy
         |
-        +--> one Luna/low fallback only after proven Spark/medium quota rejection
+        +--> one Luna/low fallback only after proven Spark queue quota rejection
         |
         +--> adaptive Beeper wake-up policy
         |      inactive/expired wake lease -> send wake-up signal once
@@ -46,7 +47,9 @@ sealed outbox -> Feishu reply -> terminal scrub
 ```
 
 The Operator never reads native task output as the answer. The selected task is
-the only Responder. Queue exit 0 is acceptance, not proof that a model turn
+the only Responder. The selected Beeper model is Luna/low by default, or an
+explicit local `beeper`/low or Spark selection; none overrides the Responder.
+Queue exit 0 is acceptance, not proof that a model turn
 ran. The Operator keeps a process-local 30-minute wake lease for the fixed
 Beeper, shared across every Feishu scope. An attributed new Responder turn or a
 Final Callback refreshes the lease. An inactive or expired lease causes the
@@ -59,7 +62,7 @@ bare `codex://threads/<exact Beeper UUID>` deep link contains no request data
 and is never addressed to a Responder. Opening the deep link can navigate
 Desktop to Beeper; acceptance of the URI is not proof of model execution.
 
-The lease is deliberately process-local: a Operator restart starts with no active
+The lease is deliberately process-local: an Operator restart starts with no active
 wake lease. Codex
 Desktop can restart while the resident Operator survives, so the 30-second
 fallback remains necessary even inside the nominal lease window. This bounds a

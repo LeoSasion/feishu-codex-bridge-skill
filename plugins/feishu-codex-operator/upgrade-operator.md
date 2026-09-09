@@ -1,5 +1,86 @@
 # Upgrade and naming cutover
 
+Version notes describe when behavior was introduced; they do not establish the
+installed version. Verify that separately using read-only status and the runtime
+manifest. Older stopped-install instructions are not a general requirement to
+close Desktop for registry edits. Use the current
+[registration and reload contract](references/model-router.md#registration-and-operation);
+the alpha.122 correction to the former label-specific Desktop guard is recorded in
+[acceptance](references/responses-acceptance.md#alpha108-separate-stopped-label-transaction).
+
+Plugin `1.1.0` packages runtime source `4.2.0-alpha.122`. Label updates now allow
+Desktop to remain open while preserving the stopped Operator/router checks,
+empty callbacks, exact package version, preview digest, original backup and atomic
+write. The current CLI success fixture also exercises JSON-upstream projection
+through a real exec/MCP continuation with serial calls, without adding another
+CLI scenario. Current installation state is separate from this source release;
+an older installation without its ownership journal still needs reviewed migration.
+
+Version `4.2.0-alpha.121` preserves nullable reasoning content through JSON and
+SSE/WS and validates reasoning history and terminal output using the same
+bounded content checks. Invalid history is rejected before contacting upstream;
+an invalid or unfinished terminal reasoning item prevents tool release. Omitted,
+null and empty content remain distinct, and observed streamed text cannot be
+erased with null. No reasoning-to-answer conversion or retry is added. The wire
+shape was checked with a newly generated official CLI 0.153.4 schema.
+Source validation does not install this code or update any registry. An owned,
+request-free stopped router is required for deployment; registry reload cannot
+replace code, and previous adapter-bound evidence stays historical.
+
+Version `4.2.0-alpha.120` checks the complete generated event projection before
+emitting JSON-upstream SSE or WebSocket output: at most 16 MiB per serialized
+event JSON and 64 MiB in total, including repeated snapshots. Exact boundaries
+use actual sequence numbers. Text parts no longer inherit the smaller 2 MiB
+tool argument limit. Over-limit output releases no event, is not truncated and
+is never retried. Source, inventory, tests and rule mirrors are synchronized;
+the adapter digest changes, so prior acceptance evidence stays historical.
+This source has not been installed into the running router. Deploy executable
+changes only with the exact owned router request-free and stopped; registry
+reload cannot replace code. No registry or capability policy is changed here.
+
+Version `4.2.0-alpha.119` adds optional
+`responses.completed_output_policy: "require_message_or_tool"` for an explicitly
+selected adapted endpoint. A completed response containing only reasoning or
+empty messages fails with the fixed diagnostic
+`completed_response_without_message_or_tool`; it never promotes reasoning to
+an answer or tool call or retries the request. The default is `"allow_empty"`,
+preserving earlier contracts. Enabling the policy changes the evidence digest;
+it does not establish model coding quality or Desktop acceptance. Install code
+only with the owned router request-free and stopped; this source change has not
+updated existing local registrations or services.
+
+Version `4.2.0-alpha.118` adds opt-in `responses.upstream_response_mode: "json"`.
+The first upstream request is non-streaming; only a validated complete JSON
+response is serialized into downstream SSE/WS. The default remains
+`"match_client"`, including strict byte comparisons for observed upstream streams.
+This is a transport choice, not an automatic fallback or repaired stream.
+The endpoint contract/evidence changes and first output waits for completion.
+See [Gemma compatibility](references/model-router.md#gemma-and-complete-json-upstream-alpha118).
+Deploy executable changes only with the exact router request-free and stopped;
+registry reload cannot install code. Template repair and provider protocol tests
+do not establish Desktop execution or approval acceptance. LM Studio per-model
+template overrides are separate, locally journaled repairs, never auto-installed
+or automatically removed by the plugin.
+
+Version `4.2.0-alpha.117` distinguishes unsupported hosted search declarations
+from malformed function names before contacting an external model. The fixed
+error codes expose no tool names or request content. Hosted search remains
+unsupported on adapted routes; this change does not replay failed tasks or
+establish live Desktop/search acceptance.
+
+The same alpha.117 source introduced opt-in
+`responses.input_tool_definitions: "additional_tools_v1"`. This lifts the
+exact dated Codex developer `additional_tools` envelopes into
+the existing tool map, retaining source envelopes in request memory. Default
+registrations still reject this input form; custom identities such as
+`functions.exec` still require explicit registration. Paired result names and
+namespaces are checked and mapped consistently; unfinished historical calls
+and unsuccessful tool-discovery outputs are rejected before any upstream send.
+See [the protocol contract](references/model-router.md#input-tool-declarations-alpha117).
+This source change requires a new adapter/evidence binding and a request-free
+router restart when deployed; registry reload cannot replace executable code.
+It does not enable hosted search, alter approvals, or rerun failed tasks.
+
 Version `4.2.0-alpha.116` blocks recovery when an existing installation loses its
 ownership journal, supports installation after completed safe removal while
 retaining the previous recovery records, and preserves an explicit

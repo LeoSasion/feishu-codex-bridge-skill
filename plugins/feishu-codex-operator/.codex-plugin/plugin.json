@@ -1,6 +1,6 @@
 {
   "name": "feishu-codex-operator",
-  "version": "1.0.0+codex.20260909042814",
+  "version": "1.1.0",
   "description": "Map Feishu conversations to Codex Desktop tasks with minimal Beeper relay and Final Callback delivery.",
   "author": {
     "name": "Feishu Codex Operator Project"

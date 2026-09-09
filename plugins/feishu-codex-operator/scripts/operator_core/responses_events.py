@@ -184,6 +184,8 @@ class ResponsesEventAdapter:
         if key not in state.text_parts:
             part = TextState(kind)
             initial = state.added.get(collection, [])
+            if state.added["type"] == "reasoning" and collection == "content" and initial is None:
+                initial = []
             if not isinstance(initial, list):
                 raise RouterError("invalid_initial_text_parts")
             if index < len(initial):
@@ -292,6 +294,8 @@ class ResponsesEventAdapter:
                 return []
             for collection in ("content", "summary"):
                 initial = item.get(collection, [])
+                if item["type"] == "reasoning" and collection == "content" and initial is None:
+                    continue
                 if not isinstance(initial, list) or len(initial) > MAX_ITEMS:
                     raise RouterError("invalid_initial_text_parts")
                 allowed = ({"output_text", "refusal"} if item["type"] == "message"
@@ -392,6 +396,105 @@ class ResponsesEventAdapter:
     def finish(self):
         if not self.terminal:
             raise UpstreamProtocolError("truncated_upstream_tool_stream_no_retry")
+
+
+def completed_response_events(response):
+    """Serialize an already validated JSON response, never repair an observed stream.
+
+    Callers must run restore_response on the entire successful response first.
+    These events all become available after completion; they are not token timing.
+    """
+    # JSON passthrough can carry shapes that have no lossless text-event form.
+    # Check every item before even the first event, including items after a tool.
+    for item in response["output"]:
+        if item["type"] not in {"message", "reasoning"}:
+            continue
+        for collection in ("summary", "content"):
+            if collection not in item:
+                continue
+            parts = item[collection]
+            if item["type"] == "reasoning" and collection == "content" and parts is None:
+                continue
+            allowed = ({"summary_text"} if collection == "summary" and item["type"] == "reasoning"
+                       else {"reasoning_text"} if item["type"] == "reasoning"
+                       else {"output_text", "refusal"} if collection == "content" else set())
+            if not isinstance(parts, list) or len(parts) > MAX_ITEMS:
+                raise UpstreamProtocolError("invalid_json_event_content")
+            for part in parts:
+                if not isinstance(part, dict) or part.get("type") not in allowed:
+                    raise UpstreamProtocolError("invalid_json_event_content")
+                try:
+                    bounded_string(part.get("refusal" if part["type"] == "refusal" else "text"),
+                                   maximum=MAX_EVENT_BYTES)
+                except RouterError as exc:
+                    raise UpstreamProtocolError("invalid_json_event_content") from exc
+    # Item/part/done snapshots repeat text and metadata, so a bounded JSON
+    # response can expand past the stream budget. Check every actual event
+    # before releasing even the first one, including any earlier tool calls.
+    # Two passes retain only one generated event, not an expanded event list.
+    total = 0
+    for event in _completed_response_events(response):
+        size = len(dumps(event).encode("utf-8"))
+        if size > MAX_EVENT_BYTES:
+            raise UpstreamProtocolError("external_event_too_large_no_retry")
+        total += size
+        if total > MAX_STREAM_BYTES:
+            raise UpstreamProtocolError("adapted_stream_too_large")
+    yield from _completed_response_events(response)
+
+
+def _completed_response_events(response):
+    """Deterministic event projection; callers validate before exposing output."""
+    sequence = 0
+
+    def event(kind, **fields):
+        nonlocal sequence
+        result = {"type": kind, "sequence_number": sequence, **fields}
+        sequence += 1
+        return result
+
+    initial = {**response, "status": "in_progress", "output": []}
+    if "completed_at" in initial:
+        initial["completed_at"] = None
+    yield event("response.created", response=initial)
+    yield event("response.in_progress", response=deepcopy(initial))
+    for index, item in enumerate(response["output"]):
+        added = deepcopy(item)
+        if "status" in added:
+            added["status"] = "in_progress"
+        kind = item["type"]
+        if kind in {"function_call", "custom_tool_call", "tool_search_call"}:
+            key = "input" if kind == "custom_tool_call" else "arguments"
+            added[key] = {} if kind == "tool_search_call" else ""
+        else:
+            for collection in ("content", "summary"):
+                if collection in added and added[collection] is not None:
+                    added[collection] = []
+        yield event("response.output_item.added", output_index=index, item=added)
+        common = {"output_index": index, "item_id": item["id"]}
+        if kind in {"function_call", "custom_tool_call"}:
+            prefix = "response.custom_tool_call_input" if key == "input" else "response.function_call_arguments"
+            yield event(prefix + ".delta", **common, delta=item[key])
+            yield event(prefix + ".done", **common, **{key: item[key]})
+        elif kind in {"message", "reasoning"}:
+            for collection in ("summary", "content"):
+                parts = item.get(collection)
+                if parts is None:
+                    continue
+                for part_index, part in enumerate(parts):
+                    summary = collection == "summary"
+                    part_fields = {**common, "summary_index" if summary else "content_index": part_index}
+                    part_prefix = "response.reasoning_summary_part" if summary else "response.content_part"
+                    text_key = "refusal" if part["type"] == "refusal" else "text"
+                    text_prefix = {"output_text": "response.output_text", "refusal": "response.refusal",
+                                   "reasoning_text": "response.reasoning_text",
+                                   "summary_text": "response.reasoning_summary_text"}[part["type"]]
+                    yield event(part_prefix + ".added", **part_fields, part={**part, text_key: ""})
+                    yield event(text_prefix + ".delta", **part_fields, delta=part[text_key])
+                    yield event(text_prefix + ".done", **part_fields, **{text_key: part[text_key]})
+                    yield event(part_prefix + ".done", **part_fields, part=part)
+        yield event("response.output_item.done", output_index=index, item=item)
+    yield event("response.completed", response=response)
 
 
 async def restore_events(chunks, context):

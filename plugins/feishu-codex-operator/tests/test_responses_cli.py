@@ -56,25 +56,19 @@ for line in sys.stdin:
 @unittest.skipUnless(web is not None and os.environ.get("CODEX_OPERATOR_TEST_CLI"),
                      "explicit current Desktop CLI and optional router environment required")
 class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
-    async def test_current_cli_exec_roundtrip_uses_isolated_fake_upstream(self):
-        await self.exercise("text(17 + 25);", "42")
-
     async def test_current_cli_nested_tool_capability_rejection_roundtrip(self):
         await self.exercise(
             'await tools.view_image({path: FIXTURE_PATH});',
             "view_image is not allowed because you do not support image inputs")
 
-    async def test_current_cli_successful_nested_mcp_roundtrip(self):
+    async def test_current_cli_exec_nested_mcp_and_serial_capability_roundtrip(self):
         await self.exercise(
             'const tool = ALL_TOOLS.find(tool => tool.name.endsWith("__fixture_add")); '
             'if (!tool) throw new Error("synthetic_nested_tool_missing"); '
             'text(await tools[tool.name]({left:17, right:25}));',
-            "SYNTHETIC_NESTED_SUM_42", nested_mcp=True)
+            "SYNTHETIC_NESTED_SUM_42", nested_mcp=True, serial_only=True, json_mode=True)
 
-    async def test_current_cli_serial_capability_roundtrip(self):
-        await self.exercise("text(17 + 25);", "42", serial_only=True)
-
-    async def exercise(self, code, expected, nested_mcp=False, serial_only=False):
+    async def exercise(self, code, expected, nested_mcp=False, serial_only=False, json_mode=False):
         executable = Path(os.environ["CODEX_OPERATOR_TEST_CLI"]).resolve(strict=True)
         received, wire_tools = [], []
         request_retries = 0
@@ -94,6 +88,9 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
                 item = {"id": "fc_cli", "type": "function_call", "call_id": "call_cli",
                         "name": tools[0]["name"], "status": "completed",
                         "arguments": dumps({"input": code})}
+                if json_mode:
+                    return web.json_response({"id": "resp_cli_call", "object": "response",
+                                              "status": "completed", "output": [item]})
                 return web.Response(body=wire(events_for(item)), content_type="text/event-stream")
             outputs = [item for item in body.get("input", [])
                        if item.get("type") == "function_call_output" and item.get("call_id") == "call_cli"]
@@ -104,6 +101,8 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
             item = {"id": "msg_cli", "type": "message", "role": "assistant", "status": "completed",
                     "content": [{"type": "output_text", "text": "SYNTHETIC_EXEC_VERIFIED", "annotations": []}]}
             response = {"id": "resp_cli_done", "object": "response", "status": "completed", "output": [item]}
+            if json_mode:
+                return web.json_response(response)
             events = [
                 {"type": "response.created", "response": {**response, "status": "in_progress", "output": []}},
                 {"type": "response.output_item.added", "output_index": 0,
@@ -127,6 +126,8 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
             row["responses"].update(structured_tool_outputs=False, text_tool_outputs="json_string")
         if serial_only:
             row["responses"]["parallel_tool_calls"] = False
+        if json_mode:
+            row["responses"]["upstream_response_mode"] = "json"
         registry = ModelRegistry({"version": 2, "models": [row]}, BEEPER)
         router = ModelRouter(registry, "c" * 64)
         gateway = TestServer(router.app())
@@ -198,6 +199,9 @@ class CurrentCliExecTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(child.returncode, 0, details)
                 self.assertEqual(request_retries, 0)
                 self.assertEqual(len(received), 2, details)
+                self.assertTrue(all(body["stream"] is (not json_mode) for body in received))
+                if serial_only:
+                    self.assertTrue(all(body["parallel_tool_calls"] is False for body in received))
                 self.assertIn(b"SYNTHETIC_EXEC_VERIFIED", stdout)
         finally:
             if child is not None and child.returncode is None:

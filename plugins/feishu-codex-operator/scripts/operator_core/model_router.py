@@ -18,7 +18,7 @@ from .beeper_provider import BeeperResponsesEngine
 from .model_registry import ModelRegistry, RouterError
 from .responses_capabilities import UpstreamProtocolError, protocol_reason, protocol_response_state
 from .responses_tool_adapter import prepare_request, restore_response, loads
-from .responses_events import restore_events
+from .responses_events import restore_events, completed_response_events
 from .responses_metrics import CURRENT_METRICS, ResponsesMetrics
 
 NATIVE_BASE = "https://chatgpt.com/backend-api/codex"
@@ -341,12 +341,16 @@ class ModelRouter:
                 headers = {"Content-Type": "application/json", "Accept-Encoding": "identity"}
                 if key:
                     headers["Authorization"] = "Bearer " + key
-                external_body = encode({**payload, "model": route.model})
+                downstream_stream = bool(payload.get("stream"))
+                external_payload = {**payload, "model": route.model}
+                if context is not None and context.capabilities.upstream_response_mode == "json":
+                    external_payload["stream"] = False
+                external_body = encode(external_payload)
                 if len(external_body) > MAX_BODY:
                     raise RouterError("adapted_request_too_large")
                 return await self.proxy(request, route.api_base.rstrip("/") + "/responses",
                                         external_body, headers,
-                                        context=context, stream=bool(payload.get("stream")))
+                                        context=context, stream=downstream_stream)
             stream = bool(payload.get("stream"))
             PHASE.set("local_response")
             if not stream:
@@ -394,11 +398,12 @@ class ModelRouter:
             message = str(exc) if isinstance(exc, RouterError) else "invalid_request"
             error = {"type": "invalid_request_error", "message": message}
             field = getattr(exc, "protocol_field", None)
-            if field in {"protocol.string", "protocol.identifier", "tools.description",
+            if field in {"protocol.string", "protocol.identifier", "tools.description", "tools.name", "tools.type",
                          "custom_tool.input", "content.text", "function_call.arguments", "input.tool_call"}:
                 error["param"] = field  # Fixed schema label, never payload text or tool names.
             code = getattr(exc, "protocol_code", None)
-            if code in {"history_tool_name_invalid", "history_tool_definitions_empty",
+            if code in {"tool_definition_name_invalid", "unsupported_tool_type",
+                        "history_tool_name_invalid", "history_tool_definitions_empty",
                         "history_tool_namespace_mismatch", "history_tool_kind_mismatch",
                         "history_registered_custom_not_advertised", "history_unregistered_tool_call"}:
                 error["code"] = code
@@ -456,23 +461,18 @@ class ModelRouter:
                    if k.lower() not in {"content-type", "content-encoding", "etag",
                                         "content-md5", "digest", "content-range"}}
         content_type = upstream.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-        if not stream:
-            if content_type != "application/json":
-                raise UpstreamProtocolError("external_json_response_required")
-            data = bytearray()
-            async for chunk in self.metrics.chunks(upstream.content.iter_chunked(65536), begin):
-                data.extend(chunk)
-                if len(data) > MAX_BODY:
-                    raise UpstreamProtocolError("external_json_response_too_large")
-            try:
-                with self.metrics.measure("response_adaptation"):
-                    restored = restore_response(loads(data), context)
-            except RouterError as exc:
-                raise UpstreamProtocolError("invalid_external_json_response") from exc
-            return web.Response(body=encode(restored), headers=headers, content_type="application/json")
-        if content_type != "text/event-stream":
-            raise UpstreamProtocolError("external_sse_response_required")
-        iterator = restore_events(self.metrics.chunks(upstream.content.iter_chunked(65536), begin), context)
+        if not stream or context.capabilities.upstream_response_mode == "json":
+            restored = await self.read_adapted_json(upstream, context, begin)
+            if not stream:
+                return web.Response(body=encode(restored), headers=headers, content_type="application/json")
+            async def json_events():
+                for event in completed_response_events(restored):
+                    yield event
+            iterator = json_events()
+        else:
+            if content_type != "text/event-stream":
+                raise UpstreamProtocolError("external_sse_response_required")
+            iterator = restore_events(self.metrics.chunks(upstream.content.iter_chunked(65536), begin), context)
         try:
             first = await anext(iterator)
             output = web.StreamResponse(headers={**headers, "Content-Type": "text/event-stream",
@@ -487,6 +487,24 @@ class ModelRouter:
             return output
         finally:
             await iterator.aclose()
+
+    async def read_adapted_json(self, upstream, context, begin):
+        """Bound and validate the whole response before exposing any executable call."""
+        if (upstream.status != 200
+                or upstream.headers.get("Content-Encoding", "identity").lower() != "identity"):
+            raise UpstreamProtocolError("unsupported_adapted_response_encoding_or_status")
+        if upstream.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise UpstreamProtocolError("external_json_response_required")
+        data = bytearray()
+        async for chunk in self.metrics.chunks(upstream.content.iter_chunked(65536), begin):
+            data.extend(chunk)
+            if len(data) > MAX_BODY:
+                raise UpstreamProtocolError("external_json_response_too_large")
+        try:
+            with self.metrics.measure("response_adaptation"):
+                return restore_response(loads(data), context)
+        except RouterError as exc:
+            raise UpstreamProtocolError("invalid_external_json_response") from exc
 
     async def local_response(self, payload):
         return self.beeper.create(payload)[0]
@@ -507,7 +525,8 @@ class ModelRouter:
         key = route.key()
         if key:
             headers["Authorization"] = "Bearer " + key
-        external_body = encode({**payload, "model": route.model, "stream": True})
+        json_mode = context is not None and context.capabilities.upstream_response_mode == "json"
+        external_body = encode({**payload, "model": route.model, "stream": not json_mode})
         if len(external_body) > MAX_BODY:
             raise RouterError("adapted_request_too_large")
         begin = perf_counter()
@@ -515,6 +534,14 @@ class ModelRouter:
                 data=external_body,
                 headers=headers, allow_redirects=False) as response:
             self.metrics.observe("upstream_headers", perf_counter() - begin)
+            if json_mode:
+                if response.status >= 400:
+                    self.record_failure(status=response.status)
+                    raise RouterError("external_stream_unavailable")
+                restored = await self.read_adapted_json(response, context, begin)
+                for event in completed_response_events(restored):
+                    yield event
+                return
             if response.status != 200 or "text/event-stream" not in response.headers.get("Content-Type", ""):
                 self.record_failure(status=response.status)
                 raise RouterError("external_stream_unavailable")

@@ -6,8 +6,134 @@ from unittest.mock import patch
 
 from test_responses_tools import CODE, FUNCTION, EXEC, prepare, call, response
 from operator_core.responses_capabilities import RouterError, UpstreamProtocolError, protocol_reason
-from operator_core.responses_events import DONE, SSEDecoder, ResponsesEventAdapter, restore_events
+from operator_core.responses_events import DONE, SSEDecoder, ResponsesEventAdapter, restore_events, completed_response_events
 from operator_core.responses_tool_adapter import dumps
+
+
+class CompletedJsonEventTests(unittest.TestCase):
+    def test_nullable_reasoning_content_roundtrips_without_normalizing_absence(self):
+        for fields in ({}, {"content": None}, {"content": []}):
+            item = {"id": "rs_1", "type": "reasoning", "summary": [], **fields}
+            with self.subTest(fields=fields):
+                original = response(item)
+                events = list(completed_response_events(original))
+                self.assertEqual(next(e["item"] for e in events if e["type"] == "response.output_item.added"), item)
+                self.assertEqual(events[-1]["response"], original)
+                _, context = prepare()
+                checker = ResponsesEventAdapter(context)
+                for event in events:
+                    checker.feed(event)
+                checker.finish()
+                self.assertFalse(any(e["type"].endswith(".delta") for e in events))
+
+    def test_nullable_initial_reasoning_can_receive_text_but_cannot_erase_it(self):
+        _, context = prepare()
+        for erase in (False, True):
+            events = text_events("\r\n中文😀  ", part_type="reasoning_text")
+            events[1]["item"]["content"] = None
+            if erase:
+                events[-2]["item"]["content"] = None
+            checker = ResponsesEventAdapter(context)
+            with self.subTest(erase=erase):
+                if erase:
+                    with self.assertRaises(UpstreamProtocolError):
+                        for event in events:
+                            checker.feed(event)
+                    self.assertFalse(checker.terminal)
+                else:
+                    for event in events:
+                        checker.feed(event)
+                    checker.finish()
+
+    def test_expanded_stream_budget_is_checked_before_the_first_event(self):
+        tool = {"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "add",
+                "status": "completed", "arguments": "{}"}
+        message = {"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+                   "content": [{"type": "output_text", "text": "中文\r\n" * 30,
+                                "annotations": [{"type": "fixture", "value": "metadata" * 50}]}]}
+        original = response(tool, message)
+        events = list(completed_response_events(original))
+        total = sum(len(dumps(event).encode("utf-8")) for event in events)
+        self.assertLess(len(dumps(original).encode("utf-8")), total - 1)
+        with patch("operator_core.responses_events.MAX_STREAM_BYTES", total - 1):
+            with self.assertRaisesRegex(UpstreamProtocolError, "adapted_stream_too_large"):
+                next(completed_response_events(original))
+        with patch("operator_core.responses_events.MAX_STREAM_BYTES", total):
+            self.assertEqual(list(completed_response_events(original)), events)
+
+    def test_event_budget_uses_actual_serialized_sequence_numbers(self):
+        original = response({"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+                             "content": [{"type": "output_text", "text": "中文" * 30}]})
+        events = list(completed_response_events(original))
+        maximum = max(len(dumps(event).encode("utf-8")) for event in events)
+        with patch("operator_core.responses_events.MAX_EVENT_BYTES", maximum):
+            self.assertEqual(list(completed_response_events(original)), events)
+        with patch("operator_core.responses_events.MAX_EVENT_BYTES", maximum - 1):
+            with self.assertRaisesRegex(UpstreamProtocolError, "external_event_too_large_no_retry"):
+                next(completed_response_events(original))
+
+    def test_message_text_does_not_inherit_the_smaller_tool_argument_limit(self):
+        text = "中" * (2 * 1024 * 1024 // 3 + 1) + "\r\n"
+        original = response({"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+                             "content": [{"type": "output_text", "text": text}]})
+        events = list(completed_response_events(original))
+        self.assertEqual(next(e["delta"] for e in events if e["type"] == "response.output_text.delta"), text)
+        self.assertEqual(events[-1]["response"], original)
+
+    def test_strict_reasoning_only_stream_never_emits_success_or_executable_call(self):
+        _, context = prepare(completed_output_policy="require_message_or_tool")
+        for part_type in ("summary_text", "reasoning_text"):
+            with self.subTest(part_type=part_type):
+                adapter, restored = ResponsesEventAdapter(context), []
+                with self.assertRaises(UpstreamProtocolError) as caught:
+                    for event in text_events("<tool_call>draft is not a call</tool_call>", part_type=part_type):
+                        restored.extend(adapter.feed(event))
+                self.assertEqual(protocol_reason(caught.exception), "completed_response_without_message_or_tool")
+                self.assertFalse(adapter.terminal)
+                self.assertFalse(any(e["type"] == "response.completed" for e in restored))
+                self.assertFalse(any(e.get("item", {}).get("type") in {"function_call", "custom_tool_call", "tool_search_call"} for e in restored))
+
+    def test_mixed_parts_keep_types_owners_whitespace_and_terminal(self):
+        items = [
+            {"id": "reason_1", "type": "reasoning", "status": "completed",
+             "summary": [{"type": "summary_text", "text": " summary\r\n"}],
+             "content": [{"type": "reasoning_text", "text": "\n thinking 中文😀 "}]},
+            {"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+             "content": [{"type": "output_text", "text": "\n\nanswer \r\n", "annotations": []},
+                         {"type": "refusal", "refusal": " refusal "}]},
+        ]
+        original = response(*items)
+        snapshot = deepcopy(original)
+        events = list(completed_response_events(original))
+        _, context = prepare({"tools": []})
+        checker = ResponsesEventAdapter(context)
+        for event in events:
+            checker.feed(event)
+        checker.finish()
+        self.assertEqual(original, snapshot)
+        self.assertEqual(events[-1]["response"], original)
+        self.assertEqual([e["sequence_number"] for e in events], list(range(len(events))))
+        deltas = [e for e in events if e["type"].endswith(".delta")]
+        self.assertEqual([e["delta"] for e in deltas], [" summary\r\n", "\n thinking 中文😀 ", "\n\nanswer \r\n", " refusal "])
+
+    def test_search_object_and_raw_custom_input_are_not_reencoded(self):
+        items = [{"id": "custom_1", "type": "custom_tool_call", "call_id": "call_1", "name": "exec",
+                  "namespace": "functions", "status": "completed", "input": "\n  text('中文');\r\n"},
+                 {"id": "search_1", "type": "tool_search_call", "call_id": "call_2", "execution": "client",
+                  "status": "completed", "arguments": {"query": " some tools "}}]
+        events = list(completed_response_events(response(*items)))
+        self.assertEqual(next(e["delta"] for e in events if e["type"] == "response.custom_tool_call_input.delta"), items[0]["input"])
+        self.assertFalse(any(e["type"].startswith("response.function_call_arguments") for e in events))
+        self.assertEqual([e["item"] for e in events if e["type"] == "response.output_item.done"], items)
+
+    def test_invalid_late_part_blocks_all_events_even_after_a_valid_tool(self):
+        tool = {"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "fixture",
+                "status": "completed", "arguments": "{}"}
+        for parts in ("opaque", [{"type": "output_text", "text": "wrong owner"}],
+                      [{"type": "reasoning_text", "text": {"opaque": True}}]):
+            item = {"id": "reason_1", "type": "reasoning", "content": parts}
+            with self.subTest(parts=parts), self.assertRaisesRegex(UpstreamProtocolError, "invalid_json_event_content"):
+                next(completed_response_events(response(tool, item)))
 
 
 def events_for(*items):

@@ -74,7 +74,10 @@ def optional_description(value):
 
 def tool_name(value):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value):
-        raise RouterError("invalid_tool_name")
+        error = RouterError("invalid_tool_name")
+        error.protocol_field = "tools.name"
+        error.protocol_code = "tool_definition_name_invalid"
+        raise error
     return value
 
 
@@ -146,6 +149,9 @@ class RequestContext:
     parallel: bool
     capabilities: ResponsesCapabilities
     visible_names: frozenset
+    # Dated Responses Lite envelopes, retained verbatim with their input index.
+    # These are protocol declarations, never messages, inferred calls or grants.
+    input_tool_definitions: tuple = ()
 
     def find(self, item):
         kind = {"function_call": "function", "custom_tool_call": "custom",
@@ -190,6 +196,8 @@ class RequestContext:
 
 def _compile_tools(payload, caps):
     specs, upstream, visible = {}, {}, {}
+    input_definitions = []
+    declared_defer = {}
 
     def add_many(tools, *, loaded=False, namespace=None, description=""):
         if not isinstance(tools, list):
@@ -199,6 +207,13 @@ def _compile_tools(payload, caps):
             if not isinstance(original, dict):
                 raise RouterError("invalid_tool_definition")
             kind = original.get("type")
+            # Hosted built-ins do not have a function name. Classify them before
+            # validating names; never drop them or infer an execution backend.
+            if not isinstance(kind, str) or kind not in {"namespace", "custom", "function", "tool_search"}:
+                error = RouterError("unsupported_tool_type")
+                error.protocol_field = "tools.type"
+                error.protocol_code = "unsupported_tool_type"
+                raise error
             name = "tool_search" if kind == "tool_search" else tool_name(original.get("name"))
             if (kind, name) in local_names:
                 raise RouterError("duplicate_tool_definition")
@@ -209,8 +224,6 @@ def _compile_tools(payload, caps):
                 add_many(original.get("tools"), loaded=loaded, namespace=name,
                          description=optional_description(original.get("description")))
                 continue
-            if kind not in {"custom", "function", "tool_search"}:
-                raise RouterError("unsupported_tool_type")
             tool = deepcopy(original)
             defer = tool.pop("defer_loading", False)
             if type(defer) is not bool or (defer and not caps.tool_search):
@@ -237,6 +250,12 @@ def _compile_tools(payload, caps):
             if kind == "function" and not isinstance(tool.get("parameters"), dict):
                 raise RouterError("function_parameters_required")
             key = kind, namespace, name
+            if not loaded:
+                # Successful search results may lift defer_loading, but two
+                # declaration sources cannot silently disagree about visibility.
+                if key in declared_defer and declared_defer[key] != defer:
+                    raise RouterError("conflicting_tool_definition")
+                declared_defer[key] = defer
             alias = tool_alias(kind, namespace, name)
             # Keep top-level exec recognizable to the model. Types, not opaque
             # names, carry its wrapper; any real namespace/name collision fails.
@@ -281,12 +300,31 @@ def _compile_tools(payload, caps):
     add_many(payload.get("tools", []))
     items = payload.get("input")
     if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict) and item.get("type") == "tool_search_output":
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "additional_tools":
+                if caps.input_tool_definitions != "additional_tools_v1":
+                    raise RouterError("input_tool_definitions_not_supported")
+                # Codex 0.153.4 ResponseItem::AdditionalTools is deliberately
+                # excluded from its App Server schema. Its wire shape is bound
+                # to the matching official protocol/tool_spec sources instead.
+                if (set(item) - {"type", "role", "tools", "id"}
+                        or item.get("role") != "developer"):
+                    raise RouterError("unsupported_input_tool_definition_fields")
+                if item.get("id") is not None:
+                    identifier(item["id"])
+                if len(input_definitions) >= MAX_TOOLS:
+                    raise RouterError("too_many_input_tool_definitions")
+                add_many(item.get("tools"))
+                input_definitions.append((index, deepcopy(item)))
+            elif item.get("type") == "tool_search_output":
                 if item.get("execution") != "client" or not caps.tool_search:
                     raise RouterError("server_tool_search_not_supported")
+                if item.get("status") != "completed":
+                    raise RouterError("unfinished_tool_search_output")
                 add_many(item.get("tools"), loaded=True)
-    return specs, upstream, visible
+    return specs, upstream, visible, tuple(input_definitions)
 
 
 def _content(value, caps, *, tool_output=False):
@@ -310,6 +348,30 @@ def _content(value, caps, *, tool_output=False):
                 raise RouterError("image_url_required")
         else:
             raise RouterError("unsupported_input_modality")
+
+
+def _reasoning_item(item):
+    """Validate completed textual reasoning without changing optional fields."""
+    if item.get("status") not in (None, "completed"):
+        raise RouterError("unfinished_reasoning_item")
+    for collection, allowed in (("summary", {"summary_text"}),
+                                ("content", {"reasoning_text", "text"})):
+        if collection not in item:
+            continue
+        parts = item[collection]
+        # Codex 0.153.4 permits absent/null reasoning content, not null summary.
+        if collection == "content" and parts is None:
+            continue
+        if not isinstance(parts, list) or len(parts) > MAX_OUTPUT_ITEMS:
+            raise RouterError("invalid_reasoning_content")
+        for part in parts:
+            if (not isinstance(part, dict) or not isinstance(part.get("type"), str)
+                    or part["type"] not in allowed):
+                raise RouterError("invalid_reasoning_content")
+            try:
+                bounded_string(part.get("text"), maximum=16 * 1024 * 1024)
+            except RouterError:
+                raise RouterError("invalid_reasoning_content") from None
 
 
 def _named_function_output(item, caps):
@@ -361,14 +423,24 @@ def _history(payload, context):
         raise RouterError("invalid_responses_input")
     result, calls, outputs, aliases = [], {}, set(), {}
     caps = context.capabilities
-    for item in items:
+    definition_indices = {index for index, _ in context.input_tool_definitions}
+    for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise RouterError("invalid_history_item")
-        entry = deepcopy(item)
         kind = item.get("type", "message")
         if item.get("encrypted_content") not in (None, "") or kind == "compaction":
             raise RouterError("opaque_cross_provider_context_not_supported")
+        if kind == "additional_tools":
+            if index not in definition_indices:
+                raise RouterError("input_tool_definitions_not_supported")
+            # Already compiled into top-level tools using the same identities,
+            # schemas and capability checks. Keep the source envelope in context;
+            # do not inject its JSON into a system/developer/user message.
+            continue
+        entry = deepcopy(item)
         if kind in CALL_TYPES:
+            if item.get("status") not in (None, "completed"):
+                raise RouterError("unfinished_tool_call")
             spec = context.find(item)
             if spec.upstream_name in aliases and aliases[spec.upstream_name] != spec.key:
                 raise RouterError("tool_alias_collision")
@@ -402,7 +474,14 @@ def _history(payload, context):
                         "tool_search": "tool_search_output"}
             if spec is None or call_id in outputs or kind != expected[spec.kind]:
                 raise RouterError("unmatched_tool_output")
+            if (item.get("name") is not None and item["name"] != spec.name
+                    or item.get("namespace") is not None and item["namespace"] != spec.namespace):
+                raise RouterError("tool_output_identity_mismatch")
             outputs.add(call_id)
+            if item.get("name") is not None:
+                entry["name"] = spec.upstream_name
+            if item.get("namespace") is not None:
+                entry.pop("namespace")
             if kind == "tool_search_output":
                 if item.get("execution") != "client":
                     raise RouterError("server_tool_search_not_supported")
@@ -430,6 +509,7 @@ def _history(payload, context):
         elif kind == "reasoning":
             if not caps.reasoning_input:
                 raise RouterError("reasoning_history_not_supported")
+            _reasoning_item(item)
         else:
             raise RouterError("unsupported_history_item")
         result.append(entry)
@@ -469,7 +549,7 @@ def prepare_request(payload, capabilities, reasoning_efforts):
         raise RouterError("text_verbosity_not_supported")
     if "parallel_tool_calls" in payload and type(payload["parallel_tool_calls"]) is not bool:
         raise RouterError("invalid_parallel_tool_calls")
-    specs, upstream, visible = _compile_tools(payload, caps)
+    specs, upstream, visible, input_definitions = _compile_tools(payload, caps)
     choice = payload.get("tool_choice", "auto")
     selected = None
     if isinstance(choice, str):
@@ -499,18 +579,20 @@ def prepare_request(payload, capabilities, reasoning_efforts):
     # True permits parallel calls; it does not require more than one. Narrow
     # that permission to the registered endpoint's ability before the first send.
     parallel = caps.parallel_tool_calls and payload.get("parallel_tool_calls", True)
-    context = RequestContext(specs, upstream, frozenset(), choice, selected, parallel, caps, frozenset(visible))
+    context = RequestContext(specs, upstream, frozenset(), choice, selected, parallel, caps,
+                             frozenset(visible), input_definitions)
     history, history_calls = _history(payload, context)
     prepared = deepcopy(payload)
     prepared["input"] = history
-    if "tools" in payload or visible:
+    if "tools" in payload or visible or input_definitions:
         prepared["tools"] = list(visible.values())
     if "tool_choice" in payload or choice == "named":
         prepared["tool_choice"] = wire_choice
     # The model's omitted default must not enable unsupported parallel calls.
     if visible and not caps.parallel_tool_calls:
         prepared["parallel_tool_calls"] = False
-    context = RequestContext(specs, upstream, history_calls, choice, selected, parallel, caps, frozenset(visible))
+    context = RequestContext(specs, upstream, history_calls, choice, selected, parallel, caps,
+                             frozenset(visible), input_definitions)
     return prepared, context
 
 
@@ -526,6 +608,8 @@ def restore_item(item, context):
             if item.get("role") != "assistant" or item.get("status", "completed") != "completed":
                 raise RouterError("invalid_output_message")
             _content(item.get("content"), context.capabilities)
+        else:
+            _reasoning_item(item)
         return entry, None
     if kind not in {"function_call", "custom_tool_call"} or item.get("namespace") is not None:
         raise RouterError("unsupported_upstream_output_item")
@@ -585,6 +669,23 @@ def restore_response(response, context):
                 or (context.selected is not None and any(k != context.selected for k in chosen))
                 or (not context.parallel and len(chosen) > 1)):
             raise RouterError("upstream_violated_tool_choice")
+        if context.capabilities.completed_output_policy == "require_message_or_tool" and not chosen:
+            # This endpoint explicitly requires a deliverable at the terminal.
+            # Reasoning (including textual tool markup) is never an answer or call.
+            # Inspect only already-validated message parts; preserve all bytes.
+            message_present = False
+            for item in result:
+                if item.get("type") != "message":
+                    continue
+                content = item["content"]
+                if isinstance(content, str):
+                    message_present |= bool(content)
+                else:
+                    message_present |= any(
+                        bool(part.get("refusal") if part["type"] == "refusal" else part.get("text"))
+                        for part in content if part["type"] in {"output_text", "text", "refusal"})
+            if not message_present:
+                raise RouterError("completed_response_without_message_or_tool")
         return {**deepcopy(response), "output": result}
     except (RouterError, TypeError, KeyError, UnicodeError, RecursionError) as exc:
         error = UpstreamProtocolError("invalid_upstream_tool_response_no_retry")

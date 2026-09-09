@@ -9,6 +9,27 @@ from operator_core.responses_capabilities import RouterError
 
 
 class ProfileTests(unittest.TestCase):
+    def test_optional_codecs_are_explicit_and_invalidate_contract_evidence(self):
+        from operator_core.responses_capabilities import ResponsesCapabilities
+        for field, default, enabled, invalid in (
+            ("completed_output_policy", "allow_empty", "require_message_or_tool", [None, True, {}, [], "guess", "promote_reasoning"]),
+            ("upstream_response_mode", "match_client", "json", [True, None, {}, "auto", "retry_json"]),
+            ("input_tool_definitions", "reject", "additional_tools_v1", [None, True, [], "auto", "native"]),
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(getattr(ResponsesCapabilities.parse(ROUTE["responses"]), field), default)
+                for value in invalid:
+                    with self.subTest(value=value), self.assertRaisesRegex(RouterError, "invalid_" + field):
+                        ResponsesCapabilities.parse({**ROUTE["responses"], field: value})
+                row = deepcopy(ROUTE)
+                row["responses"][field] = enabled
+                self.assertNotEqual(contract_digest(row), contract_digest(ROUTE))
+                profile = self.profile()
+                profile["registration"] = row
+                with self.assertRaisesRegex(RouterError, "changed_since"):
+                    inspect_profile(profile)
+                self.assertEqual(preflight(row)["upstream_requests"], 0)
+
     def profile(self):
         when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return make_profile("synthetic-profile", deepcopy(ROUTE), [
@@ -32,6 +53,18 @@ class ProfileTests(unittest.TestCase):
         profile["registration"].update(slug="api/renamed", display_name="Another label", api_key_env="UNSET_TEST_KEY")
         self.assertTrue(inspect_profile(profile)["isolated_cli_verified"])
         self.assertEqual(preflight(profile["registration"])["upstream_requests"], 0)
+
+    def test_input_tool_codec_preflight_is_read_only(self):
+        row = deepcopy(ROUTE)
+        row["responses"]["input_tool_definitions"] = "additional_tools_v1"
+        request = {"input": [{"type": "additional_tools", "role": "developer", "tools": [
+            {"type": "function", "name": "fixture", "parameters": {"type": "object"}}]}]}
+        before = deepcopy(request)
+        result = preflight(row, request=request)
+        self.assertEqual(request, before)
+        self.assertEqual((result["upstream_requests"], result["desktop_verified"]), (0, False))
+        with self.assertRaisesRegex(RouterError, "input_tool_definitions_not_supported"):
+            preflight(ROUTE, request=request)
 
     def test_stale_source_and_missing_checks_are_never_verified(self):
         profile = self.profile()

@@ -123,10 +123,11 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
         from aiohttp.test_utils import TestServer
         cases = [(case, "correct", "exact") for case in ("cli_multiround", "cli_tool_error", "cli_patchplan",
                                                 "cli_error_stop", "cli_exit_stop")]
-        cases += [("cli_exit_stop", behavior, "exact") for behavior in ("retry", "omit_error", "leading_lf", "trailing_lf", "extra_round")]
-        cases += [("cli_exit_stop", behavior, "marker_line_v1") for behavior in
-                  ("leading_lf", "trailing_lf", "retry", "omit_error", "extra_round")]
-        cases += [("cli_patchplan", "leading_lf", "marker_line_v1")]
+        # Boundary permutations live in EvalFixtureTests. Keep one real-CLI
+        # policy comparison and exercise each stop violation under the more
+        # permissive format policy so whitespace compatibility cannot mask it.
+        cases += [("cli_exit_stop", "leading_lf", policy) for policy in ("exact", "marker_line_v1")]
+        cases += [("cli_exit_stop", behavior, "marker_line_v1") for behavior in ("retry", "omit_error", "extra_round")]
         for case, behavior, policy in cases:
             with self.subTest(case=case, behavior=behavior, policy=policy):
                 received = []
@@ -160,8 +161,6 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                             marker = "STOPPED synthetic_expected_error " + marker
                         if behavior == "leading_lf":
                             marker = "\n\n" + marker
-                        if behavior == "trailing_lf":
-                            marker += "\n"
                         item = {"id": "msg_end", "type": "message", "role": "assistant", "status": "completed",
                                 "content": [{"type": "output_text", "text": marker, "annotations": []}]}
                         if behavior == "extra_round":
@@ -187,7 +186,7 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                 row["responses"].update(parallel_tool_calls=False, text_tool_outputs="json_string")
                 try:
                     report = await evaluate(row, case, Path(os.environ["CODEX_OPERATOR_TEST_CLI"]), final_text_policy=policy)
-                    accepted = behavior == "correct" or (policy == "marker_line_v1" and behavior in {"leading_lf", "trailing_lf"})
+                    accepted = behavior == "correct" or (policy == "marker_line_v1" and behavior == "leading_lf")
                     self.assertEqual(report["status"], "passed" if accepted else "failed", {"report": report, "synthetic_outputs": [
                         item["output"] for body in received for item in body["input"]
                         if item.get("type") == "function_call_output"]})
@@ -196,7 +195,7 @@ class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(report["fixture_calls_after_error"], 1 if behavior == "retry" else 0)
                         self.assertEqual(report["failure_report_verified"], behavior not in {"omit_error", "extra_round"})
                         self.assertEqual(report["request_budget_exceeded"], behavior == "extra_round")
-                    if behavior in {"leading_lf", "trailing_lf"}:
+                    if behavior == "leading_lf":
                         self.assertFalse(report["verification_exact"])
                         self.assertTrue(report["verification_matched_after_trim"])
                 finally:
