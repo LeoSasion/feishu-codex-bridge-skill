@@ -1,5 +1,9 @@
 # Optional Python Responses router
 
+Official DeepSeek and GLM development candidates and their explicit endpoint
+contracts are documented in [official online models](official-online-models.md).
+These source assets do not activate routing or transfer historical acceptance.
+
 ## Reasoning content validation (alpha.121)
 
 Adapted reasoning items retain the distinction between absent `content`,

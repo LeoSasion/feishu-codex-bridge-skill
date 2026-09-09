@@ -25,6 +25,10 @@ wake-up signal (currently a Desktop deep link) only when needed. The existing
 
 ## 参考与致谢
 
+DeepSeek V4 Flash 与 GLM 5.3 Flash 的官方在线 Responses 候选配置已纳入源码，
+包含环境变量入口、当前工具适配策略及隔离验证方式，见
+[官方在线模型接入](references/official-online-models.md)。安装不会自动注册或启用它们。
+
 工具声明转换、保留原始身份并将调用交回当前 Codex 任务执行的设计，参考了
 [miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web)。
 感谢 miuuyy 分享这套思路，帮助我们解决工具调用方案设计中的难题。

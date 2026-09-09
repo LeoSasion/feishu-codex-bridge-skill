@@ -36,7 +36,7 @@ class ProbeReceiptTests(unittest.TestCase):
 
 @unittest.skipUnless(web, "optional aiohttp environment required")
 class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
-    async def exercise(self, change_source=False, reject=False, case="json"):
+    async def exercise(self, change_source=False, reject=False, case="json", registration=None):
         seen = []
 
         async def upstream(request):
@@ -68,8 +68,10 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
         server = TestServer(app)
         await server.start_server()
         try:
-            row = {**deepcopy(ROUTE), "api_base": str(server.make_url("/v1")).rstrip("/")}
-            row["responses"]["structured_tool_outputs"] = True
+            row = {**deepcopy(ROUTE if registration is None else registration),
+                   "api_base": str(server.make_url("/v1")).rstrip("/"), "api_key_env": ""}
+            if registration is None:
+                row["responses"]["structured_tool_outputs"] = True
             report = await probe(row, case)
             self.assertFalse(report["execution_performed"])
             self.assertEqual(report["requests"], len(seen))
@@ -86,6 +88,12 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_exact_call_continues_once_with_synthetic_output(self):
         await self.exercise()
+        candidates = Path(__file__).resolve().parents[1] / "assets" / "responses"
+        for model in ("deepseek-v4-flash", "glm-5.3-flash"):
+            row = json.loads((candidates / (model + ".candidate.json")).read_text(encoding="utf-8"))
+            for case in ("json", "sse"):
+                with self.subTest(model=model, case=case):
+                    await self.exercise(case=case, registration=row)
 
     async def test_model_source_change_never_continues(self):
         await self.exercise(change_source=True)

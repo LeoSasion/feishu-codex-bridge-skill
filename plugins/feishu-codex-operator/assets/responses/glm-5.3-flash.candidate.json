@@ -1,0 +1,57 @@
+{
+  "slug": "api/glm-5.3-flash",
+  "display_name": "GLM 5.3 Flash (unverified candidate)",
+  "model": "glm-5.3-flash",
+  "api_base": "https://open.bigmodel.cn/api/v1",
+  "api_key_env": "GLM_API_KEY",
+  "context_window": 1048576,
+  "reasoning_efforts": [
+    "low"
+  ],
+  "responses": {
+    "protocol": "responses-tools-v1",
+    "function_tools": true,
+    "custom_tools": {
+      "exec": "wrap",
+      "functions.exec": "wrap"
+    },
+    "tool_choice": [
+      "auto",
+      "none"
+    ],
+    "named_tool_choice": "reject",
+    "parallel_tool_calls": false,
+    "tool_search": true,
+    "input_modalities": [
+      "text"
+    ],
+    "structured_tool_outputs": false,
+    "developer_role": "native",
+    "reasoning_input": true,
+    "reasoning_summary": false,
+    "previous_response_id": false,
+    "text_verbosity": false,
+    "codex_tool_mode": "code_mode_only",
+    "text_tool_outputs": "json_string",
+    "history_custom_tools": {
+      "exec": "codex_exec_v1",
+      "functions.exec": "codex_exec_v1"
+    },
+    "named_function_outputs": {
+      "codex_app.send_message_to_thread": "user_message_json_v1"
+    },
+    "input_tool_definitions": "additional_tools_v1",
+    "upstream_response_mode": "json",
+    "completed_output_policy": "require_message_or_tool",
+    "tool_choice_by_reasoning": {
+      "low": [
+        "auto",
+        "none"
+      ],
+      "unspecified": [
+        "auto",
+        "none"
+      ]
+    }
+  }
+}
