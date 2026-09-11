@@ -10,11 +10,24 @@ from unittest.mock import patch
 
 from test_responses_tools import ROUTE
 from test_responses_events import events_for, wire
-from operator_responses_eval import EXPECTED, SOURCE, STOP_CASES, Fixture, evaluate, isolated_environment, verify_final_message, prompt_for, json_output_summary
+from operator_responses_eval import EXPECTED, SOURCE, STOP_CASES, Fixture, evaluate, isolated_environment, verify_final_message, prompt_for, json_output_summary, cancellation_observed
 from operator_core.responses_tool_adapter import dumps, tool_alias
 
 
 class EvalFixtureTests(unittest.TestCase):
+    def test_cancel_requires_cancelled_dispatch_and_outcome_not_just_inactivity(self):
+        dispatches = [{"transport_result": "cancelled", "request_body_write_started": True}]
+        outcomes = {"cancelled": 1, "completed": 0, "failed": 0}
+        self.assertTrue(cancellation_observed(True, 0, 1, dispatches, outcomes))
+        for field, value in (("transport_result", "returned"), ("transport_result", "raised"),
+                             ("request_body_write_started", False)):
+            self.assertFalse(cancellation_observed(True, 0, 1, [{**dispatches[0], field: value}], outcomes))
+        for outcome in ("completed", "failed"):
+            self.assertFalse(cancellation_observed(True, 0, 1, dispatches,
+                             {**outcomes, "cancelled": 0, outcome: 1}))
+        for was_active, active, requests in ((False, 0, 1), (True, 1, 1), (True, 0, 2)):
+            self.assertFalse(cancellation_observed(was_active, active, requests, dispatches, outcomes))
+
     def test_json_diagnostics_retain_only_fixed_counts(self):
         value = {"output": [{"type": kind, "name": "PRIVATE_TOOL_NAME", "id": "PRIVATE_ID",
                   "arguments": "PRIVATE_ARGUMENTS", "content": [{"text": "PRIVATE_TEXT"}]}
@@ -128,6 +141,43 @@ class EvalFixtureTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("CODEX_OPERATOR_TEST_CLI"), "explicit current Desktop CLI required")
 class CurrentCliEvalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_json_cancellation_reaches_upstream_without_waiting_for_headers(self):
+        from aiohttp import web
+        from aiohttp.test_utils import TestServer
+        received, disconnected = asyncio.Event(), asyncio.Event()
+        calls = 0
+        async def upstream(request):
+            nonlocal calls
+            await request.read()
+            calls += 1
+            received.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                disconnected.set()
+                raise
+        app = web.Application(handler_args={"handler_cancellation": True})
+        app.router.add_post("/v1/responses", upstream)
+        server = TestServer(app)
+        await server.start_server()
+        row = deepcopy(ROUTE)
+        row.update(api_base=str(server.make_url("/v1")), reasoning_efforts=["low"])
+        row["responses"].update(parallel_tool_calls=False, text_tool_outputs="json_string",
+                                upstream_response_mode="json")
+        try:
+            report = await evaluate(row, "cli_cancel", Path(os.environ["CODEX_OPERATOR_TEST_CLI"]))
+            self.assertEqual(report["status"], "passed", report)
+            self.assertTrue(received.is_set())
+            await asyncio.wait_for(disconnected.wait(), 2)
+            self.assertEqual(calls, 1)
+            self.assertTrue(report["cancel_observed"])
+            self.assertEqual(report["upstream_header_responses"], 0)
+            self.assertFalse(report["upstream_headers_observed_before_cancel"])
+            self.assertFalse(report["provider_cancellation_verified"])
+            self.assertEqual(report["timing"]["outcomes"], {"cancelled": 1, "completed": 0, "failed": 0})
+        finally:
+            await server.close()
+
     async def test_multiround_error_and_readonly_patch_plan_use_actual_cli(self):
         from aiohttp import web
         from aiohttp.test_utils import TestServer

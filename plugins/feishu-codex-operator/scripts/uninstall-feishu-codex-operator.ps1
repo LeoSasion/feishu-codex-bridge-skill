@@ -22,7 +22,7 @@ if (-not $CodexConfig) {
 }
 Assert-OperatorPlainPath $runtime
 Assert-OperatorPlainPath $bundle
-$links = @(Get-OperatorDesktopPaths)
+$links = @(Get-OperatorDesktopPaths -IncludeLegacy)
 $restore = Get-OperatorRestorePlan $project $links
 $processes = @(Get-CimInstance Win32_Process)
 $operatorPath = Join-Path $runtime 'operator_main.py'
@@ -38,14 +38,16 @@ if ($restore.conflicts) { $blocks += 'managed_files_or_backups_changed' }
 if ($running.Count) { $blocks += 'stop_exact_operator_before_uninstall' }
 if ($routing.pending_callbacks) { $blocks += 'callbacks_pending' }
 if ($routing.active_router_requests) { $blocks += 'router_requests_active' }
-if (Test-Path -LiteralPath (Join-Path $bundle 'Codex.exe')) {
+$launchers = @('Codex拓展入口.exe','Codex.exe' | ForEach-Object { Join-Path $bundle $_ } | Where-Object { Test-Path -LiteralPath $_ })
+if ($launchers.Count -gt 1) { $blocks += 'ambiguous_native_fallback_builds' }
+foreach ($launcher in $launchers) {
     $buildFile = Join-Path $bundle 'launcher-manifest.json'
     Assert-OperatorPlainPath $buildFile
     if (-not (Test-Path -LiteralPath $buildFile)) { $blocks += 'native_fallback_build_record_missing' }
     else {
         $build = Get-Content -LiteralPath $buildFile -Raw -Encoding utf8 | ConvertFrom-Json
         if ($build.schema_version -ne 1 -or $build.native_fallback -ne 'native-only-v1' -or
-            $build.binary_sha256 -cne (Get-OperatorFingerprint (Join-Path $bundle 'Codex.exe'))) { $blocks += 'native_fallback_build_changed' }
+            $build.binary_sha256 -cne (Get-OperatorFingerprint $launcher)) { $blocks += 'native_fallback_build_changed' }
     }
 }
 if ($routing.owned_router_entry) {
@@ -78,7 +80,7 @@ if (-not $Apply) { $preview | ConvertTo-Json -Depth 10; exit 0 }
 if ($blocks.Count) { $preview | ConvertTo-Json -Depth 10; throw 'Uninstall stopped at preflight; no restore was attempted.' }
 & $python -B $helper detach --project-root $project --codex-config $CodexConfig --port $RouterPort
 if ($LASTEXITCODE -ne 0) { throw 'Routing detachment stopped; no files were restored or requests replayed.' }
-if (Test-Path -LiteralPath (Join-Path $bundle 'Codex.exe')) {
+if ($launchers.Count -eq 1) {
     Write-OperatorAtomicBytes (Join-Path $bundle 'native-only') ([Text.Encoding]::ASCII.GetBytes('native-only'))
 }
 Restore-OperatorManagedFiles $project $links | Out-Null

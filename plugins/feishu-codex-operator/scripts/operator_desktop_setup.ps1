@@ -8,7 +8,7 @@ Import-Module (Join-Path $PSScriptRoot 'operator_installation.psm1') -Force -Dis
 
 function Show-OperatorInstallationNotice {
     @'
-初始化说明：将配置当前用户桌面和开始菜单的 Codex 启动入口，并先保存原快捷方式。
+初始化说明：将配置当前用户桌面和开始菜单的“Codex拓展入口”，并先保存同名原快捷方式。官方 Codex 入口保持独立。
 Codex 已运行时只打开现有窗口；本地模型同步仅在对应功能已配置且 Codex 完全退出后的启动时执行。
 原生任务栏固定项可能需要手动重新固定。不会修改应用程序本体、默认模型、审批或沙箱设置。
 安全卸载会按安装记录恢复入口、项目规则和 Hooks，遇到后续修改则停止并保留原件。
@@ -23,6 +23,32 @@ function Install-OperatorDesktopEntry {
     $bundle = Join-Path $project '.codex/operator-desktop-entry'
     Assert-OperatorPlainPath $bundle
     $targets = @(Get-OperatorDesktopPaths)
+    if (Test-Path -LiteralPath (Join-Path $bundle 'Codex.exe')) {
+        throw 'The previous launcher name requires a reviewed ownership migration before setup.'
+    }
+    # Upgrades must preserve later edits just as native-only reinstalls do.
+    # Validate before publishing a new ownership generation or replacing files.
+    $executable = Join-Path $bundle 'Codex拓展入口.exe'
+    $entry = Join-Path $bundle 'operator_desktop_entry.ps1'
+    $buildFile = Join-Path $bundle 'launcher-manifest.json'
+    $configurationPath = Join-Path $bundle 'desktop-entry.json'
+    if (@($executable,$entry,$buildFile,$configurationPath | Where-Object { Test-Path -LiteralPath $_ }).Count) {
+        foreach ($path in @($executable,$entry,$buildFile,$configurationPath)) {
+            Assert-OperatorPlainPath $path
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'The existing launcher build is incomplete; setup stopped.' }
+        }
+        if ((Get-Item -LiteralPath $buildFile).Length -gt 16384 -or
+            (Get-Item -LiteralPath $configurationPath).Length -gt 16384) { throw 'Invalid existing launcher records.' }
+        $oldBuild = Get-Content -LiteralPath $buildFile -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+        $oldConfiguration = Get-Content -LiteralPath $configurationPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+        if ($oldBuild.schema_version -ne 1 -or $oldBuild.native_fallback -cne 'native-only-v1' -or
+            $oldBuild.binary_sha256 -cne (Get-OperatorFingerprint $executable) -or
+            $oldBuild.entry_script_sha256 -cne (Get-OperatorFingerprint $entry) -or
+            $oldConfiguration.schema_version -ne 1 -or $oldConfiguration.mode -notin @('native','reviewed_startup') -or
+            $oldConfiguration.entry_script_sha256 -cne $oldBuild.entry_script_sha256) {
+            throw 'The existing launcher changed; setup preserved it for review.'
+        }
+    }
     Start-OperatorInstallation -ProjectRoot $project -LinkPaths $targets
     $state = Get-OperatorOwnership $project
     $nativeMarker = Join-Path $bundle 'native-only'
@@ -30,13 +56,6 @@ function Install-OperatorDesktopEntry {
     if ($reactivate) {
         Assert-OperatorPlainPath $nativeMarker
         if ($state.reactivate_native_launcher -ne $true) { throw 'Complete uninstall before reinstalling the launcher.' }
-        $buildFile = Join-Path $bundle 'launcher-manifest.json'
-        Assert-OperatorPlainPath $buildFile
-        $oldBuild = Get-Content -LiteralPath $buildFile -Raw -Encoding utf8 | ConvertFrom-Json
-        if ($oldBuild.schema_version -ne 1 -or $oldBuild.native_fallback -ne 'native-only-v1' -or
-            $oldBuild.binary_sha256 -cne (Get-OperatorFingerprint (Join-Path $bundle 'Codex.exe'))) {
-            throw 'The retained native launcher changed; reinstall stopped.'
-        }
     }
     $packages = @(Get-AppxPackage -Name OpenAI.Codex)
     if ($packages.Count -ne 1) { throw 'Cannot identify the installed Codex package.' }
@@ -45,15 +64,19 @@ function Install-OperatorDesktopEntry {
     $shell = New-Object -ComObject WScript.Shell
     # Never adopt an unrelated shortcut merely because its filename says Codex.
     foreach ($target in $targets) {
-        if (-not (Test-Path -LiteralPath $target)) { continue }
         $fingerprint = Get-OperatorFingerprint $target
-        if ($state.entries.Contains($target) -and $state.entries[$target].after -ceq $fingerprint) { continue }
+        if ($state.entries.Contains($target)) {
+            $owned = $state.entries[$target]
+            if ($owned.after -ceq $fingerprint -or
+                ($owned.status -eq 'pending' -and $owned.previous -ceq $fingerprint)) { continue }
+            throw 'Managed shortcut changed after installation; setup preserved it for review.'
+        }
+        if ($fingerprint -eq 'absent') { continue }
         $link = $shell.CreateShortcut($target)
         $native = $link.TargetPath -and [IO.Path]::GetFullPath($link.TargetPath).StartsWith($nativeRoot,[StringComparison]::OrdinalIgnoreCase)
         if (-not $native) { throw 'An existing Codex shortcut needs a reviewed ownership migration.' }
     }
     $configuration = @{schema_version=1; mode='native'}
-    $configurationPath = Join-Path $bundle 'desktop-entry.json'
     if (-not $reactivate -and (Test-Path -LiteralPath $configurationPath)) {
         $configuration = Get-Content -LiteralPath $configurationPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         if ($configuration.schema_version -ne 1 -or $configuration.mode -notin @('native','reviewed_startup')) { throw 'Desktop entry configuration changed.' }
@@ -78,7 +101,7 @@ function Install-OperatorDesktopEntry {
         $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
         if (-not (Test-Path -LiteralPath $compiler)) { throw 'Windows C# compiler is unavailable.' }
         $candidate = Join-Path $bundle ('candidate-' + [Guid]::NewGuid().ToString('N') + '.exe')
-        $icon = Join-Path $bundle 'Codex.ico'
+        $icon = Join-Path $bundle 'Codex拓展入口.ico'
         if (-not (Test-Path -LiteralPath $icon)) {
             Add-Type -AssemblyName System.Drawing
             $nativeIcon = [Drawing.Icon]::ExtractAssociatedIcon($nativeExe)
@@ -87,24 +110,20 @@ function Install-OperatorDesktopEntry {
         }
         & $compiler /nologo /target:winexe /optimize+ /platform:anycpu /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$candidate" (Join-Path $PSScriptRoot 'operator_desktop_entry.cs')
         if ($LASTEXITCODE -ne 0) { throw 'Desktop entry build failed.' }
-        $entry = Join-Path $bundle 'operator_desktop_entry.ps1'
         Write-OperatorAtomicBytes $entry ([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'operator_desktop_entry.ps1')))
         $configuration.entry_script_sha256 = Get-OperatorFingerprint $entry
         Write-OperatorAtomicBytes $configurationPath ([Text.UTF8Encoding]::new($false).GetBytes(($configuration | ConvertTo-Json)))
-        $executable = Join-Path $bundle 'Codex.exe'
         [IO.File]::Move($candidate,$executable,$true)
         $build = @{schema_version=1; native_fallback='native-only-v1'; binary_sha256=(Get-OperatorFingerprint $executable);
                    entry_script_sha256=$configuration.entry_script_sha256}
         Write-OperatorAtomicBytes (Join-Path $bundle 'launcher-manifest.json') ([Text.UTF8Encoding]::new($false).GetBytes(($build | ConvertTo-Json)))
         foreach ($target in $targets) {
-            # The old named synchronization shortcut is updated only when present.
-            if ($target -eq $targets[2] -and -not (Test-Path -LiteralPath $target)) { continue }
             $temporary = Join-Path $bundle ('shortcut-' + [Guid]::NewGuid().ToString('N') + '.lnk')
             try {
                 $link = $shell.CreateShortcut($temporary)
                 $link.TargetPath = $executable; $link.WorkingDirectory = $bundle
                 $link.IconLocation = $icon + ',0'; $link.WindowStyle = 7
-                $link.Description = '打开 Codex；已配置的本地模型同步在完全退出后启动时执行。'
+                $link.Description = 'Codex拓展入口：项目提供的独立启动器；已配置的模型同步在完全退出后启动时执行。'
                 $link.Save()
                 Set-OperatorManagedFile -ProjectRoot $project -Path $target -Bytes ([IO.File]::ReadAllBytes($temporary)) -LinkPaths $targets
             } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
@@ -116,7 +135,7 @@ function Install-OperatorDesktopEntry {
 
 if ($Library) { return }
 switch ($Action) {
-    'preview' { Get-OperatorRestorePlan $ProjectRoot @(Get-OperatorDesktopPaths) | ConvertTo-Json -Depth 6 }
+    'preview' { Get-OperatorRestorePlan $ProjectRoot @(Get-OperatorDesktopPaths -IncludeLegacy) | ConvertTo-Json -Depth 6 }
     'install' { Show-OperatorInstallationNotice; Install-OperatorDesktopEntry $ProjectRoot $StartupBundle | ConvertTo-Json }
     'restore' { throw 'Use operator uninstall so routing is detached before restoring the entry.' }
 }

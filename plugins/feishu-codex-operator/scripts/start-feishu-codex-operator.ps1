@@ -189,6 +189,7 @@ function Assert-OperatorRuntimeManifest {
         'operator_model_router.py',
         'operator_responses_probe.py',
         'operator_responses_eval.py',
+        'operator_terminal_fixture.py',
         'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',

@@ -11,10 +11,7 @@
   "responses": {
     "protocol": "responses-tools-v1",
     "function_tools": true,
-    "custom_tools": {
-      "exec": "wrap",
-      "functions.exec": "wrap"
-    },
+    "custom_tools": {},
     "tool_choice": [
       "auto",
       "none"
@@ -31,12 +28,9 @@
     "reasoning_summary": false,
     "previous_response_id": false,
     "text_verbosity": false,
-    "codex_tool_mode": "code_mode_only",
+    "codex_tool_mode": "standard",
     "text_tool_outputs": "json_string",
-    "history_custom_tools": {
-      "exec": "codex_exec_v1",
-      "functions.exec": "codex_exec_v1"
-    },
+    "history_custom_tools": {},
     "named_function_outputs": {
       "codex_app.send_message_to_thread": "user_message_json_v1"
     },

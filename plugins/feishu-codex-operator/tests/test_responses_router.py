@@ -50,6 +50,9 @@ class AdaptedRouterTests(unittest.IsolatedAsyncioTestCase):
             if self.mode == "bad_arguments":
                 item["arguments"] = '{"input":null}'
             result = response(*([] if self.mode == "missing_required" else [item]))
+            if self.mode == "input_part_tail":
+                result["output"].append({"id": "msg_invalid", "type": "message", "role": "assistant",
+                    "status": "completed", "content": [{"type": "input_text", "text": "synthetic input-only part"}]})
             if self.reasoning_tail is not None:
                 result["output"].append(deepcopy(self.reasoning_tail))
             if self.mode == "json_wait":
@@ -328,13 +331,13 @@ class AdaptedRouterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_json_upstream_rejects_invalid_complete_body_before_any_tool_event(self):
         self.enable_json_upstream()
-        for mode in ("bad_arguments", "json_truncated", "json_incomplete", "json_sse"):
-            for transport in ("sse", "ws"):
+        for mode in ("bad_arguments", "json_truncated", "json_incomplete", "json_sse", "input_part_tail"):
+            for transport in ("json", "sse", "ws"):
                 with self.subTest(mode=mode, transport=transport):
                     self.mode = mode
                     before = len(self.received)
-                    if transport == "sse":
-                        reply = await self.client.post(self.endpoint, json={**self.payload, "stream": True})
+                    if transport != "ws":
+                        reply = await self.client.post(self.endpoint, json={**self.payload, "stream": transport == "sse"})
                         self.assertEqual(reply.status, 502)
                         raw = await reply.read()
                     else:
@@ -348,6 +351,8 @@ class AdaptedRouterTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(CODE.encode(), raw)
                     self.assertEqual(len(self.received) - before, 1)
                     self.assertFalse(self.received[-1][0]["stream"])
+                    if mode == "input_part_tail":
+                        self.assertEqual(self.router.last_failure["protocol_reason"], "invalid_output_message_content")
 
     async def test_json_upstream_disconnect_cancels_http_and_ws_without_retry(self):
         self.enable_json_upstream()

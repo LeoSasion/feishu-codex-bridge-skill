@@ -65,6 +65,20 @@ def probe_usage(value):
     return result
 
 
+def probe_answer(response):
+    """Read validated assistant text without trimming or promoting reasoning/refusal."""
+    parts = []
+    for item in response["output"]:
+        if item.get("type") != "message":
+            continue
+        content = item["content"]
+        if isinstance(content, str):
+            parts.append(content)
+        else:
+            parts.extend(part["text"] for part in content if part["type"] in {"output_text", "text"})
+    return "".join(parts)
+
+
 def reserve_receipt(directory, row, case, run_id):
     identity = dumps({"protocol": "responses-probe-v1", "registration": row,
                       "case": case, "run_id": run_id}).encode("utf-8")
@@ -93,11 +107,15 @@ async def probe(row, case):
     route = registry.routes[row["slug"]]
     if route.responses is None:
         raise RouterError("probe_requires_explicit_responses_capabilities")
+    standard = route.responses.codex_tool_mode == "standard"
+    tool_name = "source_check" if standard else "exec"
+    call_type = "function_call" if standard else "custom_tool_call"
     router = ModelRouter(registry, secrets.token_hex(32))
     runner = web.AppRunner(router.app(), access_log=None, shutdown_timeout=2)
     report = {"case": case, "status": "failed", "requests": 0, "execution_performed": False,
               "stages": [], "configured_capabilities_are_not_verification": True,
               "synthetic_only": True, "cli_version": "none",
+              "codex_tool_mode": route.responses.codex_tool_mode,
               "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "contract_sha256": contract_digest(row), "adapter_sha256": adapter_digest(),
               "evaluator_sha256": evaluator_digest()}
@@ -111,6 +129,11 @@ async def probe(row, case):
         tool = {"type": "custom", "name": "exec", "description":
                 "Return JavaScript source as raw tool input. The test harness supplies a synthetic output.",
                 "format": {"type": "grammar", "syntax": "lark", "definition": EXEC_GRAMMAR}}
+        if standard:
+            tool = {"type": "function", "name": tool_name,
+                    "description": "Validate the exact input string. The harness supplies a synthetic result; no source is executed.",
+                    "parameters": {"type": "object", "properties": {"input": {"type": "string"}},
+                                   "required": ["input"], "additionalProperties": False}}
         code = probe_input(case)
         prompt = ("Call exec exactly once with the following exact source, preserving whitespace "
                   "and characters. Do not compute the answer yourself. After the tool output arrives, "
@@ -128,9 +151,14 @@ async def probe(row, case):
                       f"put inside input. Preserve every source character, including {newline} and "
                       "backslash escapes inside source-language strings. After the tool output "
                       "arrives, reply with only its verification value.\n" + dumps({"input": code}))
+        if standard:
+            prompt = prompt.replace("Call exec exactly once", "Call source_check exactly once")
+            prompt = prompt.replace("as its raw source", "as the input string argument")
+            prompt = ("Use a function arguments object containing exactly one input string; do not execute the source. "
+                      + prompt)
         history = [{"role": "user", "content": prompt}]
         payload = {"model": row["slug"], "input": history, "tools": [tool],
-                   "tool_choice": ({"type": "custom", "name": "exec"} if case == "named" else
+                   "tool_choice": ({"type": tool["type"], "name": tool_name} if case == "named" else
                                    "required" if case == "required" else "auto"),
                    "max_output_tokens": 8192 if case in {"long", "long-lines"} else 2048,
                    "reasoning": {"effort": route.reasoning_efforts[0]}, "stream": case == "sse"}
@@ -167,21 +195,26 @@ async def probe(row, case):
                     stage["usage"] = probe_usage(value.get("usage"))
                     return value
 
-            initial = await send("custom_call", payload)
-            calls = [item for item in initial.get("output", []) if item.get("type") == "custom_tool_call"]
-            report["custom_call_count"] = len(calls)
-            if len(calls) != 1 or calls[0].get("name") != "exec":
-                raise RouterError("probe_expected_one_exec_call")
-            report["input_exact"] = calls[0].get("input") == code
+            initial = await send("function_call" if standard else "custom_call", payload)
+            calls = [item for item in initial.get("output", []) if item.get("type") == call_type]
+            report["function_call_count" if standard else "custom_call_count"] = len(calls)
+            if len(calls) != 1 or calls[0].get("name") != tool_name:
+                raise RouterError("probe_expected_one_function_call" if standard else "probe_expected_one_exec_call")
+            actual = calls[0].get("input", "")
+            if standard:
+                arguments = loads(calls[0]["arguments"])
+                if not isinstance(arguments, dict) or set(arguments) != {"input"} or not isinstance(arguments["input"], str):
+                    raise RouterError("probe_function_arguments_mismatch")
+                actual = arguments["input"]
+            report["input_exact"] = actual == code
             report["input_bytes"] = len(code.encode("utf-8"))
             report["input_match_after_newline_normalization"] = (
-                calls[0].get("input", "").replace("\r\n", "\n") == code.replace("\r\n", "\n"))
-            actual = calls[0].get("input", "")
+                actual.replace("\r\n", "\n") == code.replace("\r\n", "\n"))
             report["source_difference"] = source_difference(code, actual)
             report["actual_input_bytes"] = len(actual.encode("utf-8"))
             report["input_contains_requested_source"] = code in actual
             report["input_is_markdown_wrapped"] = actual.lstrip().startswith("```")
-            report["input_equals_format_metadata"] = actual == dumps(tool["format"])
+            report["input_equals_format_metadata"] = not standard and actual == dumps(tool["format"])
             report["input_is_nested_json_wrapper"] = False
             try:
                 nested = loads(actual)
@@ -191,14 +224,13 @@ async def probe(row, case):
             if not report["input_exact"]:
                 raise RouterError("probe_model_changed_requested_source")
             verification = "OPERATOR_PROBE_" + secrets.token_hex(8)
-            output = {"type": "custom_tool_call_output", "call_id": calls[0]["call_id"],
+            output = {"type": "function_call_output" if standard else "custom_tool_call_output", "call_id": calls[0]["call_id"],
                       "output": dumps({"result": 42, "verification": verification})}
             if case == "structured":
                 output["output"] = [{"type": "input_text", "text": output["output"]}]
             final = await send("synthetic_output_roundtrip", {
                 **payload, "input": history + initial["output"] + [output], "tool_choice": "none"})
-            text = "".join(part.get("text", "") for item in final["output"] if item.get("type") == "message"
-                           for part in item.get("content", []) if part.get("type") == "output_text")
+            text = probe_answer(final)
             report["verification_exact"] = text == verification
             report["verification_after_trim"] = text.strip() == verification
             if not report["verification_exact"]:

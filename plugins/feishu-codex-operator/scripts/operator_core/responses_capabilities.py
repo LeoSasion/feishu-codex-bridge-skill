@@ -19,7 +19,7 @@ PROTOCOL_REASONS = frozenset({
     "invalid_json_event_content",
     "invalid_reasoning_content", "unfinished_reasoning_item",
     "protocol_string_too_large", "opaque_upstream_context_not_supported",
-    "invalid_output_message", "unsupported_structured_content", "invalid_content_part",
+    "invalid_output_message", "invalid_output_message_content", "unsupported_structured_content", "invalid_content_part",
     "unsupported_input_modality", "image_url_required", "invalid_response_item",
     "unsupported_upstream_output_item", "unknown_or_mismatched_upstream_tool",
     "unfinished_tool_call", "function_arguments_must_be_object", "custom_wrapper_requires_exact_input",

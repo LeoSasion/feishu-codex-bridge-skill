@@ -3,9 +3,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Get-OperatorDesktopPaths {
-    @((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Codex.lnk'),
-      (Join-Path ([Environment]::GetFolderPath('Programs')) 'Codex.lnk'),
-      (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Codex（同步本地模型）.lnk'))
+    param([switch]$IncludeLegacy)
+    @((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Codex拓展入口.lnk'),
+      (Join-Path ([Environment]::GetFolderPath('Programs')) 'Codex拓展入口.lnk'))
+    if ($IncludeLegacy) {
+        @((Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Codex.lnk'),
+          (Join-Path ([Environment]::GetFolderPath('Programs')) 'Codex.lnk'),
+          (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Codex（同步本地模型）.lnk'))
+    }
 }
 
 function Assert-OperatorPlainPath([string]$Path) {
@@ -49,7 +54,8 @@ function Get-OperatorOwnership([string]$ProjectRoot) {
                 '.codex/operator-installation/runtime-owner.json', '.codex/operator-installation/originals',
                 '.codex/operator-installation/uninstall-receipt.json',
                 '.codex/feishu-codex-operator-runtime/runtime-manifest.json',
-                '.codex/operator-desktop-entry/Codex.exe')) {
+                '.codex/operator-desktop-entry/Codex.exe',
+                '.codex/operator-desktop-entry/Codex拓展入口.exe')) {
             if (Test-Path -LiteralPath (Join-Path $project $evidence)) {
                 throw 'Ownership journal missing from an existing installation; recovery stopped.'
             }

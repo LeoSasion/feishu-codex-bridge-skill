@@ -77,3 +77,61 @@ standard-function scenario extends the real CLI evaluation table, bringing the
 CLI scenario count from 13 to 14 without duplicating the existing exec cases.
 The experimental line-array codec was removed after live failures and contributes
 no test methods or runtime capability to the canonical suite.
+Alpha.126 adds three behavioral methods: reject completed/failed cancellation
+races, run an actual disposable CLI cancellation before JSON response headers,
+and exercise standard-function source/result probes including a CRLF mismatch.
+The CLI matrix has 15 scenarios. Existing shortcut installation/restoration checks
+also verify distinct extension-entry metadata and preservation of official links.
+No live provider cases run during unittest discovery.
+
+Alpha.127 adds one terminal-output modality boundary method. The existing
+JSON/SSE/WebSocket rejection matrix now includes plain JSON and an invalid
+assistant-content tail after a valid tool call. The existing probe whitespace
+matrix covers already-supported legacy string/text answers too. No new fixture
+executes generated source, and private representation experiments remain outside
+test discovery and canonical acceptance profiles.
+
+Alpha.128 adds `test_terminal_eval` and a profile-identity boundary method.
+Pure checks cover exact native argument/history bytes, typed command admission,
+paired native results, distinct policy failures, isolated child PATH and unchanged
+LF/CRLF/mixed files. The two actual CLI scenarios use mock upstream responses,
+not live providers, and retain read-only/never-approve settings. Set the exact
+`CODEX_OPERATOR_TEST_POWERSHELL` and/or `CODEX_OPERATOR_TEST_BASH` executable in
+addition to `CODEX_OPERATOR_TEST_CLI`; never infer Git Bash from PATH on Windows.
+
+`CODEX_OPERATOR_TEST_TERMINAL_OUTCOME` defaults to `passed`. For a separately
+recorded refusal-boundary run it may explicitly be `policy_rejected`; the tests
+then require failed execution receipts, one upstream dispatch, exact native
+policy rejection and unchanged files. A passing refusal test is not terminal
+execution acceptance. Do not choose this expectation automatically after failure
+or use it to reclassify old acceptance results. Other environments must declare
+and verify their actual outcome separately. This adds two actual CLI scenarios
+to the existing fifteen, without rerunning live provider probes.
+
+Alpha.129 adds three focused methods for native-workspace lifecycle, the single
+literal file read and explicit child-only Windows backend selection. Existing
+result/profile tests now reject forged zero-exit text, nonzero process status,
+token-setup failures and contradictory successful receipts. Current `Output:`
+and legacy `Final output:` envelopes retain exact body comparisons.
+
+Set `CODEX_OPERATOR_TEST_WINDOWS_SANDBOX=unelevated` explicitly for a new Windows
+terminal run using the restricted-token backend. The read-only sandbox and
+never-approve policy remain fixed. The harness makes no backend retry or automatic
+fallback. PowerShell byte output avoids dependence on the constrained shell's
+console encoding, while preserving original BOM, Unicode and EOL bytes. It does
+not establish Unicode console-text output or Windows PowerShell 5 compatibility.
+
+The alpha.129 development run passed the PowerShell byte-reading case. Git Bash
+still failed inside the native sandbox while creating its MSYS signal pipe
+(Win32 error 5, native exit -1073741502). That failed result is retained; its
+execution is not repeated or counted as passed in the final full regression.
+The full run selects PowerShell and explicitly leaves the Bash opt-in unset.
+This recorded skip is not proof of Bash compatibility or a cleared failure.
+
+Alpha.130 extends the existing disposable shortcut installation/restoration
+case with later edits to the executable, entry script, build record,
+configuration and a managed shortcut pointing back to native Codex, plus a
+missing shortcut or build record. Rejected
+setup must preserve the bundle, shortcuts and ownership journal and create no
+build output. The same case still exercises unchanged upgrades and reactivation
+after a completed uninstall; it never accesses real Desktop/Start menu folders.

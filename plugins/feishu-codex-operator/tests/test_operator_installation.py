@@ -209,7 +209,7 @@ $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 if($LASTEXITCODE -ne 0){throw 'Fixture build failed'}
 function Get-AppxPackage { param($Name) [pscustomobject]@{InstallLocation=$fixtureApp} }
 function Get-OperatorDesktopPaths {
-    @((Join-Path $fixtureDesktop 'Codex.lnk'),(Join-Path $fixturePrograms 'Codex.lnk'),(Join-Path $fixtureDesktop 'Codex（同步本地模型）.lnk'))
+    @((Join-Path $fixtureDesktop 'Codex拓展入口.lnk'),(Join-Path $fixturePrograms 'Codex拓展入口.lnk'))
 }
 function Set-OperatorManagedFile {
     param($ProjectRoot,$Path,[byte[]]$Bytes,$LinkPaths)
@@ -217,15 +217,45 @@ function Set-OperatorManagedFile {
     operator_installation\\Set-OperatorManagedFile -ProjectRoot $ProjectRoot -Path $Path -Bytes $Bytes -LinkPaths $LinkPaths
 }
 $wsh=New-Object -ComObject WScript.Shell
-$originalPath=Join-Path $fixtureDesktop 'Codex.lnk'
+$officialPath=Join-Path $fixtureDesktop 'Codex.lnk'
+$official=$wsh.CreateShortcut($officialPath); $official.TargetPath=Join-Path $fixtureApp 'app/ChatGPT.exe'; $official.Save()
+$officialHash=Get-OperatorFingerprint $officialPath
+$originalPath=Join-Path $fixtureDesktop 'Codex拓展入口.lnk'
 $original=$wsh.CreateShortcut($originalPath); $original.TargetPath=Join-Path $fixtureApp 'app/ChatGPT.exe'; $original.Save()
 $originalHash=Get-OperatorFingerprint $originalPath
 Install-OperatorDesktopEntry -ProjectRoot $p | Out-Null
+$bundle=Join-Path $p '.codex/operator-desktop-entry'
+foreach($name in @('Codex拓展入口.exe','operator_desktop_entry.ps1','launcher-manifest.json','desktop-entry.json','managed-shortcut','missing-shortcut','missing-build')) {
+    $changed=if($name -in @('managed-shortcut','missing-shortcut')){$originalPath}
+             elseif($name -eq 'missing-build'){Join-Path $bundle 'launcher-manifest.json'}else{Join-Path $bundle $name}
+    $originalBytes=[IO.File]::ReadAllBytes($changed)
+    if($name -eq 'managed-shortcut') {
+        $edited=$wsh.CreateShortcut($changed)
+        $edited.TargetPath=Join-Path $fixtureApp 'app/ChatGPT.exe'
+        $edited.Description='later user change; preserve exactly'
+        $edited.Save()
+    } elseif($name -in @('missing-shortcut','missing-build')) { Remove-Item -LiteralPath $changed }
+    else { [IO.File]::WriteAllText($changed,'later user change; preserve exactly') }
+    $before=@{}
+    foreach($file in @(Get-ChildItem -LiteralPath $bundle -File)) { $before[$file.FullName]=Get-OperatorFingerprint $file.FullName }
+    foreach($path in @(Get-OperatorDesktopPaths)) { $before[$path]=Get-OperatorFingerprint $path }
+    $before[$changed]=Get-OperatorFingerprint $changed
+    $journal=Join-Path $p '.codex/operator-installation/ownership.json'
+    $before[$journal]=Get-OperatorFingerprint $journal
+    $blocked=$false
+    try { Install-OperatorDesktopEntry -ProjectRoot $p | Out-Null } catch { $blocked=$true }
+    if(-not $blocked){throw ('Changed launcher was overwritten: '+$name)}
+    foreach($path in $before.Keys) {
+        if((Get-OperatorFingerprint $path) -cne $before[$path]){throw 'Rejected setup modified an existing file'}
+    }
+    if(@(Get-ChildItem -LiteralPath $bundle -File | Where-Object { -not $before.Contains($_.FullName) }).Count){throw 'Rejected setup created build files'}
+    [IO.File]::WriteAllBytes($changed,$originalBytes)
+}
 Install-OperatorDesktopEntry -ProjectRoot $p | Out-Null
-if($wsh.CreateShortcut($originalPath).TargetPath -ine (Join-Path $p '.codex/operator-desktop-entry/Codex.exe')){throw 'Wrong launcher target'}
+if($wsh.CreateShortcut($originalPath).TargetPath -ine (Join-Path $p '.codex/operator-desktop-entry/Codex拓展入口.exe')){throw 'Wrong launcher target'}
 Restore-OperatorManagedFiles -ProjectRoot $p -LinkPaths @(Get-OperatorDesktopPaths) | Out-Null
 if((Get-OperatorFingerprint $originalPath) -cne $originalHash){throw 'Original shortcut was not restored exactly'}
-if(Test-Path -LiteralPath (Join-Path $fixturePrograms 'Codex.lnk')){throw 'Created shortcut remained'}
+if(Test-Path -LiteralPath (Join-Path $fixturePrograms 'Codex拓展入口.lnk')){throw 'Created shortcut remained'}
 $receipt=@{schema_version=1;project=$p;uninstalled=$true} | ConvertTo-Json
 [IO.File]::WriteAllText((Join-Path $p '.codex/operator-installation/uninstall-receipt.json'),$receipt)
 $marker=Join-Path $p '.codex/operator-desktop-entry/native-only'
@@ -235,6 +265,9 @@ Install-OperatorDesktopEntry -ProjectRoot $p | Out-Null
 if(Test-Path -LiteralPath $marker){throw 'Reinstalled launcher stayed native-only'}
 Restore-OperatorManagedFiles -ProjectRoot $p -LinkPaths @(Get-OperatorDesktopPaths) | Out-Null
 if((Get-OperatorFingerprint $originalPath) -cne $originalHash){throw 'Second uninstall lost the original shortcut'}
+if((Get-OperatorFingerprint $officialPath) -cne $officialHash){throw 'Official shortcut changed'}
+$version=[Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $p '.codex/operator-desktop-entry/Codex拓展入口.exe'))
+if($version.FileDescription -cne 'Codex拓展入口' -or $version.ProductName -cne 'Codex拓展入口'){throw 'Launcher branding missing'}
 """.replace('SETUP',self.q(ROOT/'scripts/operator_desktop_setup.ps1'))
         result=self.ps(code)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)

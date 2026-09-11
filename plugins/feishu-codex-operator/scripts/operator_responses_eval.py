@@ -21,10 +21,12 @@ from operator_core.responses_profiles import adapter_digest, contract_digest, ev
 from operator_core.responses_profiles import FINAL_TEXT_POLICIES
 from operator_core.responses_tool_adapter import dumps
 from operator_responses_probe import reserve_receipt
+from operator_terminal_fixture import (TERMINAL_CASES, TerminalFixture, executable_digest,
+                                       terminal_sandbox_settings, terminal_workspace)
 
 STOP_CASES = frozenset({"cli_error_stop", "cli_exit_stop"})
 CASES = ("cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
-         "cli_patchplan", "cli_workspace", "cli_cancel")
+         "cli_patchplan", "cli_workspace", "cli_cancel", *TERMINAL_CASES)
 SOURCE = '# Synthetic currency helper — preserve this comment.\r\ndef cents(amount):\r\n    return round(amount * 10)\r\n'
 EXPECTED = SOURCE.replace('amount * 10)', 'amount * 100)')
 
@@ -219,12 +221,18 @@ def verify_final_message(path, expected, final_text_policy="exact"):
             "final_message_leading_lf_count": len(text) - len(text.lstrip("\n"))}
 
 
-def isolated_environment(home):
+def isolated_environment(home, *, terminal_shell=None):
     # Provider credentials are in the router parent only, never the model/tool child.
     environment = {k: v for k, v in os.environ.items() if not k.upper().startswith(
         ("CODEX_", "OPENAI_", "CHATGPT_", "DEEPSEEK_", "GLM_")) and not any(
             word in k.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "API_KEY"))}
     environment["CODEX_HOME"] = str(home)
+    if terminal_shell is not None:
+        # Some current CLI shell resolution uses basename/PATH even for an
+        # absolute tool argument. Scope the requested directory to this child;
+        # never edit the user's PATH, default terminal or approval policy.
+        path_key = next((key for key in environment if key.upper() == "PATH"), "PATH")
+        environment[path_key] = str(Path(terminal_shell).parent) + os.pathsep + environment.get(path_key, "")
     return environment
 
 
@@ -256,12 +264,31 @@ def json_output_summary(value):
     return {"scope": "validated_json_snapshot_not_call_release", "output_counts": counts}
 
 
-async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exact"):
+def cancellation_observed(was_active, active, requests, dispatches, outcomes):
+    """A completed/failed request becoming inactive never proves cancellation."""
+    return (was_active and active == 0 and requests == 1 and len(dispatches) == 1
+            and dispatches[0]["transport_result"] == "cancelled"
+            and dispatches[0].get("request_body_write_started") is True
+            and outcomes == {"cancelled": 1, "completed": 0, "failed": 0})
+
+
+async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exact", terminal_shell=None,
+                   windows_sandbox=None):
+    sandbox_settings = terminal_sandbox_settings(case, windows_sandbox)
     if final_text_policy not in FINAL_TEXT_POLICIES:
         raise RouterError("invalid_final_text_policy")
-    from aiohttp import web
+    from aiohttp import TraceConfig, web
+    from contextlib import ExitStack, aclosing
     from operator_core.model_router import ModelRouter
     preflight(row)
+    if case in TERMINAL_CASES:
+        if (terminal_shell is None or row["responses"].get("codex_tool_mode") != "standard"
+                or row["responses"].get("upstream_response_mode") != "json"):
+            raise RouterError("terminal_evaluation_requires_explicit_shell_standard_and_json")
+        executable_digest(terminal_shell)
+    elif terminal_shell is not None:
+        raise RouterError("terminal_shell_requires_terminal_case")
+    terminal = None
     version_result = subprocess.run([str(executable), "--version"], capture_output=True,
                                     timeout=10, creationflags=0x08000000 if os.name == "nt" else 0)
     match = re.fullmatch(rb"codex-cli (\d+\.\d+\.\d+)\s*", version_result.stdout)
@@ -272,10 +299,32 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
         "beeper_model_catalog.json").read_text(encoding="utf-8"))
     dispatch_round = ContextVar("evaluation_dispatch_round", default=None)
     dispatches = []
+    body_write_started = asyncio.Event()
 
     class EvaluationRouter(ModelRouter):
         # Observation only in this disposable evaluator. Production routing is unchanged.
+        async def lifecycle(self, app):
+            async with aclosing(super().lifecycle(app)) as lifecycle:
+                async for value in lifecycle:
+                    if case == "cli_cancel":
+                        async def observe_body_write(_session, _context, _params):
+                            record = dispatch_round.get()
+                            if record is not None:
+                                record["request_body_write_started"] = True
+                                body_write_started.set()
+                        trace = TraceConfig()
+                        trace.on_request_chunk_sent.append(observe_body_write)
+                        trace.freeze()
+                        # Append before admitting any request. The callback never reads
+                        # its payload/URL/header parameters. This local write boundary
+                        # is not evidence of receipt or cancellation at the provider.
+                        self.session.trace_configs.append(trace)
+                    yield value
+
         async def proxy(self, request, url, body, headers, *, context=None, stream=False):
+            if terminal is not None:
+                from operator_core.responses_tool_adapter import loads
+                terminal.validate_followup(loads(body))
             record = {"dispatch_index": len(dispatches) + 1, "transport_result": "raised",
                       "json_snapshot": None}
             dispatches.append(record)
@@ -295,6 +344,8 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             record = dispatch_round.get()
             if record is not None:
                 record["json_snapshot"] = json_output_summary(value)
+            if terminal is not None:
+                terminal.validate_response(value)
             return value
 
     router = EvaluationRouter(ModelRegistry({"version": 2, "models": [row]}, catalog), secrets.token_hex(32))
@@ -303,7 +354,8 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
     request_times = []
     requests, active, limit = 0, 0, {"cli_nested": 2, "cli_multiround": 3,
                                     "cli_tool_error": 3, "cli_error_stop": 2, "cli_exit_stop": 2,
-                                    "cli_workspace": 4, "cli_patchplan": 4, "cli_cancel": 1}[case]
+                                    "cli_workspace": 4, "cli_patchplan": 4, "cli_cancel": 1,
+                                    **dict.fromkeys(TERMINAL_CASES, 2)}[case]
     @web.middleware
     async def bound(request, handler):
         nonlocal requests, active
@@ -334,13 +386,20 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
               "evaluator_sha256": evaluator_digest(),
               "request_limit": limit, "configured_retry_count": 0}
     try:
-        temporary = tempfile.TemporaryDirectory(prefix="operator-responses-eval-")
-        directory = temporary.name
+        temporary = ExitStack()
+        directory = temporary.enter_context(tempfile.TemporaryDirectory(prefix="operator-responses-eval-"))
         root = Path(directory)
-        home, work = root / "home", root / "work"
+        home = root / "home"
         home.mkdir()
-        work.mkdir()
-        (work / "currency.py").write_bytes(SOURCE.encode("utf-8"))
+        if case in TERMINAL_CASES:
+            work = temporary.enter_context(terminal_workspace())
+        else:
+            work = root / "work"
+            work.mkdir()
+            (work / "currency.py").write_bytes(SOURCE.encode("utf-8"))
+        if case in TERMINAL_CASES:
+            terminal = TerminalFixture(work, case, terminal_shell, "OPERATOR_EVAL_" + secrets.token_hex(8),
+                                       windows_sandbox=windows_sandbox)
         catalog_file = root / "catalog.json"
         native = {"models": [{**catalog["models"][0], "slug": "synthetic-native"}]}
         catalog_file.write_text(dumps(router.registry.merge(native)), encoding="utf-8")
@@ -356,22 +415,39 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             "model_providers.operator_fixture.supports_websockets": False,
             "mcp_servers.operator_fixture.command": sys.executable,
             "mcp_servers.operator_fixture.args": [str(Path(__file__).resolve()), "fixture", "--fixture-root", str(root), "--case", case]}
+        if terminal is not None:
+            settings = {key: value for key, value in settings.items() if not key.startswith("mcp_servers.")}
+            settings.update(sandbox_settings)
         final_file = root / "final-message.txt"
         command = [str(executable), "exec", "--ephemeral", "--ignore-user-config", "--ignore-rules",
                    "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-C", str(work),
                    "--output-last-message", str(final_file)]
         for key, value in settings.items():
             command += ["-c", key + "=" + dumps(value)]
-        command.append(prompt_for(case, final_text_policy, codex_tool_mode=tool_mode))
-        child = await asyncio.create_subprocess_exec(*command, cwd=str(work), env=isolated_environment(home),
+        if terminal is not None:
+            command.append("Bounded read-only terminal evaluation using an explicitly selected "
+                + terminal.family + " executable. Call the registered exec_command tool exactly once with these exact "
+                "JSON arguments, preserving all characters and using no other tools: " + dumps(terminal.arguments)
+                + ". The command only reads one synthetic file. "
+                + ("PowerShell returns decimal UTF-8 byte values, including any BOM; decode those values to read the marker. "
+                   if terminal.family == "powershell" else "")
+                + "Do not change the shell, command, paths, login setting or permissions. On an error, stop "
+                "without retrying. After success, reply with only its complete OPERATOR_EVAL_ marker.")
+        else:
+            command.append(prompt_for(case, final_text_policy, codex_tool_mode=tool_mode))
+        child = await asyncio.create_subprocess_exec(*command, cwd=str(work),
+            env=isolated_environment(home, terminal_shell=terminal_shell),
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             creationflags=0x08000000 if os.name == "nt" else 0)
         communication = asyncio.create_task(collect_child(child))
         if case == "cli_cancel":
             await asyncio.wait_for(admitted.wait(), timeout=min(timeout, 30))
-            deadline = time.monotonic() + 25
-            while active and "upstream_headers" not in router.metrics.stages and time.monotonic() < deadline:
-                await asyncio.sleep(0.01)
+            # A buffered JSON endpoint may deliver headers only after generation.
+            # Cancel during the local outgoing body write, without waiting for
+            # response headers or mistaking an already-completed request for cancel.
+            await asyncio.wait_for(body_write_started.wait(), timeout=min(timeout, 25))
+            report["cancel_trigger"] = "local_upstream_body_write_started"
+            report["provider_cancellation_verified"] = False
             report["upstream_headers_observed_before_cancel"] = "upstream_headers" in router.metrics.stages
             was_active = active > 0
             # Exact disposable child handle; no saved task is interrupted.
@@ -380,14 +456,17 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             deadline = time.monotonic() + 3
             while active and time.monotonic() < deadline:
                 await asyncio.sleep(0.02)
-            report.update(cancel_observed=active == 0, exit_code=child.returncode)
-            if was_active and active == 0 and requests == 1 and report["upstream_headers_observed_before_cancel"]:
+            cancelled = cancellation_observed(was_active, active, requests, dispatches, router.metrics.outcomes)
+            report.update(cancel_observed=cancelled, exit_code=child.returncode,
+                          cancel_evidence_scope="disposable_cli_disconnect_and_local_router_cancellation")
+            if cancelled:
                 report["status"] = "passed"
         else:
             stdout, stderr = await asyncio.wait_for(communication, timeout=timeout)
             report["tool_approval_required"] = b"MCP tool call requires approval" in stdout + stderr
             expected_file = root / "expected-marker"
-            expected = expected_file.read_text(encoding="ascii") if expected_file.exists() else None
+            expected = (terminal.marker if terminal is not None else
+                        expected_file.read_text(encoding="ascii") if expected_file.exists() else None)
             report.update(verify_final_message(final_file, expected, final_text_policy))
             audit_file = root / "fixture-audit.jsonl"
             audit = [json.loads(line) for line in audit_file.read_text(encoding="utf-8").splitlines()] if audit_file.exists() else []
@@ -396,8 +475,12 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             expected_actions = {"cli_nested": ["add"], "cli_multiround": ["challenge", "answer"],
                                 "cli_tool_error": ["fail", "recover"], "cli_workspace": ["read", "replace", "verify"],
                                 "cli_error_stop": ["fail"], "cli_exit_stop": ["fail"],
-                                "cli_patchplan": ["read", "propose", "verify"]}[case]
+                                "cli_patchplan": ["read", "propose", "verify"],
+                                **dict.fromkeys(TERMINAL_CASES, [])}[case]
             sequence = [r["action"] for r in audit] == expected_actions and all(r["accepted"] for r in audit)
+            if terminal is not None:
+                report.update(terminal.report())
+                sequence = sequence and terminal.call_validated and terminal.result_verified and terminal.unchanged()
             report["sequence_verified"] = sequence
             if case in STOP_CASES:
                 report.update(stopped_after_fixture_error=sequence and child.returncode == 0
@@ -422,12 +505,14 @@ async def evaluate(row, case, executable, *, timeout=90, final_text_policy="exac
             communication.cancel()
             await asyncio.gather(communication, return_exceptions=True)
         await runner.cleanup()
+        if terminal is not None:
+            report.update(terminal.report())
         if temporary is not None:
             # Preserve failure diagnostics even when a stopped child briefly
             # retains a Windows handle. Never turn cleanup trouble into a pass.
             try:
-                temporary.cleanup()
-            except OSError:
+                temporary.close()
+            except (OSError, RouterError):
                 report.update(status="failed", cleanup_failed=True)
         report.update(requests=requests, request_budget_exceeded=requests > limit,
                       client_requests=requests, admitted_client_requests=len(request_times),
@@ -454,10 +539,16 @@ def main():
     parser.add_argument("--receipt-dir", type=Path)
     parser.add_argument("--run-id")
     parser.add_argument("--fixture-root", type=Path)
+    parser.add_argument("--terminal-shell", type=Path,
+                        help="Exact executable for cli_powershell or cli_bash; no PATH/default shell inference")
+    parser.add_argument("--windows-sandbox", choices=["unelevated"],
+                        help="Explicit restricted-token backend for this disposable Windows terminal case only")
     parser.add_argument("--final-text-policy", choices=sorted(FINAL_TEXT_POLICIES), default="exact",
                         help="Synthetic final-report grammar only; never changes model output or file checks")
     args = parser.parse_args()
     if args.action == "fixture":
+        if args.case in TERMINAL_CASES or args.terminal_shell or args.windows_sandbox:
+            parser.error("terminal cases use the native CLI tool, not the MCP fixture")
         if not args.fixture_root:
             parser.error("fixture-root required")
         fixture_main(args.fixture_root, args.case)
@@ -470,7 +561,8 @@ def main():
     validate_row(row).key()
     executable = args.cli.resolve(strict=True)
     receipt = reserve_receipt(args.receipt_dir, row, args.case, args.run_id)
-    report = asyncio.run(evaluate(row, args.case, executable, final_text_policy=args.final_text_policy))
+    report = asyncio.run(evaluate(row, args.case, executable, final_text_policy=args.final_text_policy,
+                                 terminal_shell=args.terminal_shell, windows_sandbox=args.windows_sandbox))
     atomic_write(receipt, (dumps(report) + "\n").encode())
     print(dumps(report), flush=True)
     return 0 if report["status"] == "passed" else 1

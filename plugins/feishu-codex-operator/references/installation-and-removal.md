@@ -1,13 +1,14 @@
 # Initialization and safe removal
 
 Before its first write, `operator init` explains that it will configure the
-current user's desktop and Start menu Codex shortcuts, preserve their originals,
+current user's desktop and Start menu `Codex拓展入口` shortcuts, preserve any same-name originals,
 and add project rules. Runtime installation explains the same scope before
 installing Hooks and code. This notice is part of initialization, not an extra
 permission prompt after an owner has already requested that scope.
 
 The launcher is built locally under `.codex/operator-desktop-entry`; no binary
-is published. It resolves the installed Codex application dynamically. An
+is published. Its executable and Windows product/title metadata use `Codex拓展入口`;
+official `Codex` shortcuts remain separate. It resolves the installed Codex application dynamically. An
 ordinary new installation opens native Codex. It does not activate the optional
 Responses router or infer an LM Studio endpoint/capability policy. A separately
 reviewed local-model startup bundle can be attached through `operator desktop-entry
@@ -18,7 +19,18 @@ service, digest and no-replay checks. No background polling is introduced.
 Windows-generated MSIX shortcuts and taskbar pins are not rewritten. Users may
 need to pin the new launcher once. Shortcut name collisions or ownership by
 another project stop setup; an installer never takes ownership merely because
-a file is named Codex. Upgrading a runtime does not replace shortcut settings.
+a file has the expected name. Old `Codex.exe` installations require a reviewed
+rename; restoration still recognizes their journaled shortcut paths and retained
+launcher. Upgrading a runtime does not replace shortcut settings.
+
+Repeated entry setup checks the existing executable and entry script against
+their build record before replacing either file or starting a new ownership
+generation. Missing files, invalid records or changed fingerprints stop setup.
+The configuration must still reference the recorded entry script. A changed
+managed shortcut also stops before the launcher is rebuilt, even if its new
+target happens to be native Codex. Unchanged upgrades and completed-uninstall
+reactivation retain their original recovery behavior. These checks do not attest
+to historical configuration fields that were never recorded as fingerprints.
 
 ## Original files and recovery
 

@@ -10,10 +10,11 @@ import re
 from .model_registry import ModelRegistry, RouterError
 from .responses_tool_adapter import dumps, prepare_request
 
+TERMINAL_CASES = {"cli_powershell": "powershell", "cli_bash": "bash"}
 CHECKS = frozenset({"json", "sse", "required", "named", "structured", "unicode", "unicode-json", "unicode-json-lf",
                     "unicode-arguments", "unicode-arguments-lf", "long", "long-lines",
                     "cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
-                    "cli_patchplan", "cli_workspace", "cli_cancel"})
+                    "cli_patchplan", "cli_workspace", "cli_cancel", *TERMINAL_CASES})
 CORE_CHECKS = frozenset({"cli_nested", "cli_multiround", "cli_tool_error", "cli_error_stop", "cli_exit_stop",
                          "cli_patchplan", "cli_cancel"})
 FINAL_TEXT_POLICIES = frozenset({"exact", "marker_line_v1"})
@@ -48,7 +49,8 @@ def adapter_digest():
 def evaluator_digest():
     digest = hashlib.sha256()
     for path in (Path(__file__), Path(__file__).parent.parent / "operator_responses_eval.py",
-                 Path(__file__).parent.parent / "operator_responses_probe.py"):
+                 Path(__file__).parent.parent / "operator_responses_probe.py",
+                 Path(__file__).parent.parent / "operator_terminal_fixture.py"):
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -74,6 +76,13 @@ def profile_from_reports(profile_id, row, reports):
         check = {key: report.get(key) for key in ("case", "status", "checked_at", "cli_version")}
         if "final_text_policy" in report:
             check["final_text_policy"] = report["final_text_policy"]
+        if check["case"] in TERMINAL_CASES:
+            check["terminal"] = deepcopy(report.get("terminal"))
+            if check["status"] == "passed" and (any(report.get(field) is not True for field in
+                    ("terminal_call_validated", "terminal_result_verified", "terminal_fixture_unchanged"))
+                    or type(report.get("terminal_exit_code")) is not int or report["terminal_exit_code"] != 0
+                    or report.get("terminal_policy_rejected") is not False or report.get("terminal_rejection") is not None):
+                raise RouterError("terminal_report_success_not_verified")
         checks.append(check)
     return make_profile(profile_id, row, checks)
 
@@ -99,7 +108,7 @@ def inspect_profile(value, *, cli_version=None):
     outcomes, seen = {}, set()
     for record in records:
         if (not isinstance(record, dict)
-                or set(record) - {"final_text_policy"} != {"case", "status", "checked_at", "cli_version"}
+                or set(record) - {"final_text_policy", "terminal"} != {"case", "status", "checked_at", "cli_version"}
                 or not isinstance(record.get("final_text_policy", "exact"), str)
                 or record.get("final_text_policy", "exact") not in FINAL_TEXT_POLICIES
                 or ("final_text_policy" in record and not str(record.get("case", "")).startswith("cli_"))
@@ -109,6 +118,17 @@ def inspect_profile(value, *, cli_version=None):
                 or not isinstance(record["cli_version"], str)
                 or not re.fullmatch(r"(?:\d+\.\d+\.\d+|none)", record["cli_version"])):
             raise RouterError("invalid_profile_check_record")
+        if record["case"] in TERMINAL_CASES:
+            terminal = record.get("terminal")
+            if (not isinstance(terminal, dict)
+                    or set(terminal) - {"requested_windows_sandbox"} != {"family", "requested_executable_sha256"}
+                    or terminal.get("requested_windows_sandbox") not in (None, "unelevated")
+                    or terminal["family"] != TERMINAL_CASES[record["case"]] or record["cli_version"] == "none"
+                    or not isinstance(terminal["requested_executable_sha256"], str)
+                    or not re.fullmatch(r"[a-f0-9]{64}", terminal["requested_executable_sha256"])):
+                raise RouterError("invalid_profile_terminal_identity")
+        elif "terminal" in record:
+            raise RouterError("terminal_identity_requires_terminal_case")
         try:
             when = datetime.strptime(record["checked_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         except ValueError as exc:
@@ -154,6 +174,8 @@ def inspect_profile(value, *, cli_version=None):
             "evaluator_changed": evaluator_changed, "missing_cli_checks": missing,
             "recorded_failures": sum(r["status"] == "failed" for r in records),
             "gates": gates,
+            "terminal_checks": [deepcopy(record) for record in records if record["case"] in TERMINAL_CASES],
+            "terminal_checks_establish_desktop_selection": False,
             "isolated_cli_verified": current and not missing, "desktop_verified": False,
             "write_tool_approval_verified": outcomes.get("cli_workspace", {}).get("status") == "passed" and current,
             "evidence_scope": "recorded_isolated_cli_cases", "current_upstream_rechecked": False,

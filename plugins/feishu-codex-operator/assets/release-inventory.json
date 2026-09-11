@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release_name": "feishu-codex-operator-plugin",
-  "source_version": "4.2.0-alpha.125",
+  "source_version": "4.2.0-alpha.130",
   "repository_files": [
     ".agents/plugins/marketplace.json",
     ".gitignore",
@@ -107,11 +107,13 @@
         "scripts/operator_core/responses_labels.py",
         "scripts/operator_core/responses_metrics.py",
         "scripts/operator_responses_eval.py",
+        "scripts/operator_terminal_fixture.py",
         "tests/test_responses_profiles.py",
         "tests/test_responses_verification.py",
         "tests/test_responses_labels.py",
         "tests/test_responses_metrics.py",
         "tests/test_responses_eval.py",
+        "tests/test_terminal_eval.py",
         "references/responses-acceptance.md",
         "scripts/operator_installation.psm1",
         "scripts/operator_desktop_setup.ps1",

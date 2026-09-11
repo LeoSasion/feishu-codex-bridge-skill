@@ -51,7 +51,7 @@ class ProbeReceiptTests(unittest.TestCase):
 @unittest.skipUnless(web, "optional aiohttp environment required")
 class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
     async def exercise(self, change_source=False, reject=False, case="json", registration=None, whitespace="",
-                       source_transform=None):
+                       source_transform=None, final_shape="output_text"):
         seen = []
 
         async def upstream(request):
@@ -61,7 +61,7 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
                 return web.json_response({"error": "synthetic rejection"}, status=400)
             if len(seen) == 1:
                 if case == "named":
-                    self.assertEqual(body["tool_choice"], {"type": "function", "name": "exec"})
+                    self.assertEqual(body["tool_choice"], {"type": "function", "name": body["tools"][0]["name"]})
                 if case in {"unicode-json", "unicode-json-lf"}:
                     self.assertEqual(json.loads(body["input"][0]["content"].split("\n")[-1]), probe_input(case))
                 if case in {"unicode-arguments", "unicode-arguments-lf"}:
@@ -72,18 +72,22 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
                     source = source_transform(source)
                 return web.json_response(response({
                     "type": "function_call", "id": "fc_probe", "call_id": "call_probe",
-                    "status": "completed", "name": "exec", "arguments": json.dumps({
+                    "status": "completed", "name": body["tools"][0]["name"], "arguments": json.dumps({
                         "input": source})}))
             output = body["input"][-1]
+            self.assertEqual(output["type"], "function_call_output")
+            self.assertEqual(output["call_id"], "call_probe")
             result = output["output"]
             if case == "structured":
                 self.assertEqual(result[0]["type"], "input_text")
                 result = result[0]["text"]
             verification = json.loads(result)["verification"]
+            content = [{"type": final_shape, "text": whitespace + verification + whitespace, "annotations": []}]
+            if final_shape == "string":
+                content = whitespace + verification + whitespace
             return web.json_response(response({
                 "type": "message", "id": "msg_probe", "status": "completed", "role": "assistant",
-                "content": [{"type": "output_text", "text": whitespace + verification + whitespace,
-                             "annotations": []}]}))
+                "content": content}))
 
         app = web.Application()
         app.router.add_post("/v1/responses", upstream)
@@ -144,6 +148,10 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
         for whitespace in (" ", "\n", "\r\n", "\t", "\u00a0"):
             with self.subTest(whitespace=repr(whitespace)):
                 await self.exercise(whitespace=whitespace)
+        for final_shape in ("string", "text"):
+            for whitespace in ("", "\r\n"):
+                with self.subTest(final_shape=final_shape, whitespace=repr(whitespace)):
+                    await self.exercise(final_shape=final_shape, whitespace=whitespace)
 
     async def test_rejection_never_retries(self):
         await self.exercise(reject=True)
@@ -153,3 +161,18 @@ class ProbeLoopTests(unittest.IsolatedAsyncioTestCase):
                      "named", "structured", "long-lines"):
             with self.subTest(case=case):
                 await self.exercise(case=case)
+
+    async def test_standard_functions_preserve_source_and_reject_changes_without_exec(self):
+        row = deepcopy(ROUTE)
+        row["responses"].update(codex_tool_mode="standard", custom_tools={}, structured_tool_outputs=True,
+                                upstream_response_mode="json")
+        for case in ("unicode-arguments", "unicode-arguments-lf", "sse", "named", "structured"):
+            with self.subTest(case=case):
+                report = await self.exercise(case=case, registration=row)
+                self.assertEqual(report["codex_tool_mode"], "standard")
+                self.assertEqual(report["function_call_count"], 1)
+                self.assertNotIn("custom_call_count", report)
+        report = await self.exercise(case="unicode-arguments", registration=row,
+                                     source_transform=lambda value: value.replace("\r\n", "\n"))
+        self.assertEqual(report["requests"], 1)
+        self.assertEqual(report["source_difference"]["first_different_utf8_byte"], 32)

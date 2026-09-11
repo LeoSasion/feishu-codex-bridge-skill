@@ -616,7 +616,14 @@ def restore_item(item, context):
         if kind == "message":
             if item.get("role") != "assistant" or item.get("status", "completed") != "completed":
                 raise RouterError("invalid_output_message")
-            _content(item.get("content"), context.capabilities)
+            content = item.get("content")
+            # Input modalities do not authorize input-only parts in assistant
+            # output. Validate the entire snapshot before returning any call,
+            # including non-streaming JSON which has no event projection check.
+            if isinstance(content, list) and any(not isinstance(part, dict) or
+                    part.get("type") not in {"output_text", "text", "refusal"} for part in content):
+                raise RouterError("invalid_output_message_content")
+            _content(content, context.capabilities)
         else:
             _reasoning_item(item)
         return entry, None

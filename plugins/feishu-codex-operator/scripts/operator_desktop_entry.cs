@@ -3,6 +3,11 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
+using System.Reflection;
+
+[assembly: AssemblyTitle("Codex拓展入口")]
+[assembly: AssemblyProduct("Codex拓展入口")]
+[assembly: AssemblyDescription("Project-owned launcher for Codex with configured extensions")]
 
 internal static class OperatorDesktopEntry
 {
@@ -81,6 +86,6 @@ internal static class OperatorDesktopEntry
     {
         string pointer = Path.Combine(bundle, "unified-startup-last-log.txt");
         if (File.Exists(pointer)) message += Environment.NewLine + "Log location: " + pointer;
-        MessageBox.Show(message, "Codex", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        MessageBox.Show(message, "Codex拓展入口", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

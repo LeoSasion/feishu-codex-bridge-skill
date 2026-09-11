@@ -72,6 +72,9 @@
   releasing buffered tools; preserve whitespace and reject contradictions without
   trimming, reconstruction or retry. Verification reports retain CLI and Desktop
   failures separately and together, distinguishing failed, missing and stale gates.
+  Input modality declarations never authorize input-only content parts in a
+  terminal assistant message. Reject those parts before returning any tool call,
+  including plain JSON responses; preserve supported legacy text and native/v1/null.
   Content parts follow their owning message or reasoning item; reasoning_text
   parts remain distinct from output_text and refusal, with no content conversion.
   Preserve absent/null/empty reasoning content distinctly. Validate textual reasoning
@@ -109,6 +112,28 @@
   patch tools, native/v1/null and local Beeper catalog behavior. Isolated CLI
   evaluation follows the registered tool mode and records it; direct function
   evidence never establishes exec wrapping or its source-copying fidelity.
+  Synthetic source probes also follow the selected tool mode and retain exact
+  argument and result checks without execution. Standard function success never
+  establishes custom exec fidelity. Isolated CLI cancellation may trigger at the
+  local upstream body-write boundary; success requires both a cancelled dispatch
+  and a cancelled router outcome, never just inactivity. This cannot attest to
+  provider receipt, stopped generation or billing, and does not reclassify old cases.
+  Isolated terminal fixtures may explicitly select PowerShell or Bash and admit
+  one exact native read-only command. Bind the requested executable digest,
+  scope any PATH adjustment to the disposable child, and preserve command,
+  argument, file-byte and native approval checks. A policy rejection remains
+  a failed execution case; never bypass it, retry, or call it API text corruption.
+  Console formatting, requested shell identity and actual process identity are
+  separate evidence. These fixtures do not set Desktop's terminal, prove its
+  selected shell, authorize arbitrary commands or establish global readiness.
+  A Windows terminal case may explicitly select the unelevated native backend
+  for its disposable CLI child while retaining read-only/never approval settings.
+  This is no automatic fallback or host setting change and performs no UAC setup.
+  Keep the CLI home private; only new synthetic work directories use normal
+  permission inheritance. PowerShell may read bytes as decimal lines to avoid
+  console encoding dependencies; this never repairs text or proves Unicode
+  console output. Preserve policy, token-setup, process and byte-mismatch failures
+  separately, and validate the native exit status before accepting a result.
   JSON-encoded historical function arguments retain their 2 MiB bound after
   custom-input or tool-search serialization. Reject expansion before dispatch;
   never truncate, normalize source or replay to fit.
@@ -145,12 +170,18 @@
   delete missing models or change approvals during discovery. First initialization
   must explain current-user Desktop/Start menu shortcut changes, original-file
   retention, taskbar limitations and the safe uninstall sequence before writing.
+  Project-owned launchers and new Desktop/Start menu shortcuts use the explicit
+  name `Codex拓展入口`; never impersonate the official executable or shortcut name.
+  Existing journaled names remain valid only for reviewed migration and recovery.
   An owner-requested initialization may then configure those entry points without
   another prompt. It does not activate global routing or infer a local-model
   policy. Preserve a journal before changing integrations; repeated upgrades
   retain the first original, and restoration verifies current fingerprints,
   backups and exact paths before changing files. Later user edits, linked paths
   or ambiguous ownership stop recovery without overwriting them.
+  Repeated entry setup also checks recorded launcher and entry-script fingerprints
+  before replacement or a new ownership generation. Changed managed shortcuts,
+  incomplete builds and invalid records stop setup without overwriting them.
   Safe uninstall first detaches the exact owned request-free router and callback
   registration, then restores managed entry/Hook/rule files and archives runtime
   data. Keep a standalone native launcher for otherwise unobservable taskbar pins.

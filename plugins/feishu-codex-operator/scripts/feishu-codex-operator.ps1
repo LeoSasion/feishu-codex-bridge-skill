@@ -84,7 +84,7 @@ function Show-WelcomeAndAutomaticWorkflow {
 
 Operator 挂载会在当前项目写入桥接运行文件和 Codex hooks，也不会替用户授予飞书权限。/init 的独立 App Server 只按需执行 thread/list 和 includeTurns=false 的 thread/read，不创建 Desktop 查询对话。Responder 自己的模型、推理、沙箱、插件和知识库设置保持不变；Operator 不安装、注册或检索 Obsidian。
 
-Operator 初始化还会配置当前用户桌面和开始菜单的 Codex 入口，并先保存原快捷方式；任务栏可能需要手动重新固定。卸载时应先运行 operator uninstall 预览，再运行 operator uninstall -Apply 恢复，成功后才在 Desktop 移除插件。直接删除插件不代表项目配置已恢复；后续用户修改会阻止冲突恢复，模型文件和业务数据会保留。
+Operator 初始化还会配置当前用户桌面和开始菜单的“Codex拓展入口”，并先保存同名原快捷方式；官方 Codex 入口保持独立；任务栏可能需要手动重新固定。卸载时应先运行 operator uninstall 预览，再运行 operator uninstall -Apply 恢复，成功后才在 Desktop 移除插件。直接删除插件不代表项目配置已恢复；后续用户修改会阻止冲突恢复，模型文件和业务数据会保留。
 
 自动执行不会扩大请求范围：每次写入前仍核对精确目标、路径、版本、进程身份、影响范围和恢复路径；发布、凭据变更、跨项目修改或请求范围外的破坏性操作仍需用户明确提出。飞书二维码、OAuth、UAC 或身份页面若真实要求真人操作，只交还该不可自动化的外部交互，随后继续其余已请求流程。locked access 在至少配置一个经验证身份前保持拒绝全部事件。
 '@ | Write-Output
@@ -957,6 +957,7 @@ function Get-InstalledOperatorManifestIssues {
         'operator_model_router.py',
         'operator_responses_probe.py',
         'operator_responses_eval.py',
+        'operator_terminal_fixture.py',
         'model-router-requirements.txt',
         'operator_core/beeper_relay.py',
         'operator_core/runtime.py',
@@ -2153,7 +2154,7 @@ switch ($scopeName) {
             'init' {
                 . (Join-Path $PSScriptRoot 'operator_desktop_setup.ps1') -ProjectRoot (Resolve-Project) -StartupBundle $StartupBundle -Library
                 Show-OperatorInstallationNotice
-                Start-OperatorInstallation -ProjectRoot (Resolve-Project) -LinkPaths @(Get-OperatorDesktopPaths)
+                Start-OperatorInstallation -ProjectRoot (Resolve-Project) -LinkPaths @(Get-OperatorDesktopPaths -IncludeLegacy)
                 Invoke-AgentsInit
                 Install-OperatorDesktopEntry -ProjectRoot (Resolve-Project) -StartupBundle $StartupBundle | ConvertTo-Json
             }

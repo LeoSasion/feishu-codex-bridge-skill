@@ -3,10 +3,30 @@
 These explicit registrations are development candidates for the existing
 Responses adapter. They are packaged source assets, never automatically copied
 into the installed registry, activated by installation, or advertised as Desktop
-acceptance. The registrations retain their alpha.122 endpoint contracts.
-Development source alpha.125 supports the explicit standard-function evaluation
-described below, fixes its patch-tool catalog declaration, and bounds JSON-encoded
-history arguments. Candidate defaults and the installed registry remain unchanged.
+acceptance. Alpha.126 selects standard function tools in both source candidates;
+endpoint, model, key variable and reasoning effort remain unchanged. The installed
+registry still uses its previously selected contract. This source change is not
+a live migration and requires a fresh context because the standard candidates
+admit no historical custom exec calls. Older code-mode failures remain evidence.
+
+On 2026-09-11, an inactive private Desktop trial snapshot was prepared from
+alpha.129, with separate file-edit fixtures for the two standard candidates.
+Seven isolated preparation and byte-verifier checks passed; lifecycle helpers
+were syntax-checked but not activated. The installed alpha.123 runtime, registry,
+entry and user configuration stayed unchanged, and no upstream request or
+Desktop task was sent. This preparation is not Desktop acceptance: the earlier
+PowerShell mock-provider result, Git Bash process failure and online CRLF
+generation failures retain their original scope and outcomes. Fresh Desktop
+model selection, execution, permissions and subsequent gates remain unverified.
+
+Later on 2026-09-11, the owner completed the authorized restart and reported
+that the model list appeared. Independent read-only checks found the exact
+frozen alpha.129 router ready, with its owned configuration prefix and candidate
+registry matching the trial records. This is startup evidence, not model tool
+acceptance; the prepared Desktop file cases have not been dispatched. The
+installed alpha.123 runtime and its registry remain separate. Alpha.130 adds
+entry-setup preservation checks in source only; the active trial still uses its
+unchanged frozen runtime and its recovery preflight remains valid.
 
 | Candidate | Official Responses base | Key environment variable | Effort |
 | --- | --- | --- | --- |
@@ -31,9 +51,12 @@ terminal snapshot before projecting downstream events. This buffers generation;
 a downstream SSE pass does not establish upstream streaming or first-token
 latency. There is no stream repair or automatic retry.
 
-Both wrap the exact `exec` and `functions.exec` custom identities, retain paired
-history, and select the dated `additional_tools_v1` developer-envelope codec and
-the exact named result codec for `codex_app.send_message_to_thread`. Client tool
+Both source candidates now select `codex_tool_mode=standard`, with empty
+`custom_tools` and `history_custom_tools` maps. Codex advertises ordinary function
+tools directly; the catalog does not declare an unregistered freeform patch tool.
+Function calls/results keep their exact identities. The dated `additional_tools_v1`
+developer-envelope codec and exact named result codec for
+`codex_app.send_message_to_thread` remain selected. Client tool
 search definitions may be adapted after successful loading; provider-hosted web
 search stays disabled. Text tool results retain JSON part boundaries. Tools
 still execute under Codex permissions, not inside the router.
@@ -269,3 +292,166 @@ uniform-version capability profile or override prior failures. Exact CRLF source
 copying, high-effort history and fresh Desktop acceptance remain unresolved. The
 installed alpha.123 runtime, both live registrations and the default model have not
 been changed by this investigation.
+## Alpha.126 direct function validation (2026-09-10, unpublished)
+
+The source candidates now select the standard function contract investigated in
+alpha.125. This avoids asking either model to wrap MCP calls inside custom exec
+source. It does not rewrite model-generated source, grant tools or permissions,
+strip opaque reasoning state, or migrate existing tasks and live registrations.
+Native/v1/null routes, local Beeper and explicitly selected code-mode contracts
+retain their behavior. Both candidates remain labelled unverified.
+
+The source probe previously always declared custom exec, even when given an
+explicit standard registration. It now declares a synthetic `source_check`
+function in standard mode, verifies exactly one input string, and pairs a
+synthetic function result with its original call ID. It performs no source or
+tool execution. Code-mode probes retain their original custom-call path. Both
+paths stop after any input mismatch and retain exact final-answer comparison.
+
+The cancellation evaluator previously waited for upstream response headers.
+GLM's buffered JSON often delivered headers together with its completed answer,
+so that trigger could miss the active request. The new isolated evaluator
+observes aiohttp's local outgoing body-write boundary without reading its callback
+payload, URL or headers. It cancels only the disposable CLI child, and passes
+only when both the recorded dispatch and router outcome are cancelled, with no
+completed/failed request or second request. Inactivity alone cannot pass. This
+proves local disconnect propagation, not provider receipt, stopped generation or
+billing. Production routing and timing stages are unchanged. Historical late
+cancellation failures are not reclassified.
+
+The new owner-authorized observations are distinct dated receipts with zero retries:
+
+| New case | DeepSeek V4 Flash / none | GLM 5.3 Flash / low |
+| --- | --- | --- |
+| Standard CLI file read/change/verify | Passed; exact file and final answer | Passed; exact file and final answer |
+| Standard CLI tool-error recovery | Passed | Passed |
+| Standard CLI multi-round result consumption | Prior alpha.125 evidence | Passed |
+| Standard CLI tool-error stop / nonzero-exit stop | Prior alpha.125 evidence | Both passed, no extra operation |
+| Standard CLI read-only patch preview | Prior alpha.125 evidence | Passed; original file unchanged |
+| Standard CLI direct nested fixture operation | Prior alpha.125 evidence | Passed |
+| Standard CLI cancellation at local body-write boundary | Passed local cancellation, no response headers | Passed local cancellation, no response headers |
+| Direct function Unicode + LF source probe | Passed, exact 52 bytes and final verification | Passed, exact 52 bytes and final verification |
+| Direct function Unicode + CRLF source probe | Failed, 53 → 52 bytes, first difference at byte 33 | Failed, 53 → 52 bytes, first difference at byte 32 |
+
+The DeepSeek CRLF failure had no LF and did not match after CRLF-to-LF comparison;
+the GLM failure did match that diagnostic comparison. Neither result was normalized,
+executed or followed with a synthetic tool result. Standard functions therefore do
+not establish arbitrary source-copying fidelity. Existing or required line endings
+must still be checked byte-for-byte; the successful LF probes do not waive CRLF.
+
+These cases span the evaluator changes above, so they are not a single-version
+capability profile. Isolated CLI/fixture passes do not establish fresh Desktop
+acceptance or real file-write approval. High-effort opaque-history handling remains
+unimplemented pending separate owner authorization. The installed alpha.123 runtime,
+registry and native default remain unchanged; no Codex restart was required.
+
+## Alpha.127 output validation and source boundary (2026-09-10, unpublished)
+
+An isolated reproduction found that the ordinary JSON terminal validator reused
+input-content validation for assistant messages. A snapshot containing a valid
+tool call followed by an assistant `input_text` part could therefore return the
+call. JSON-to-event projection rejected such parts later, leaving inconsistent
+validation between transports. The terminal validator now rejects input-only or
+reasoning parts inside an assistant message before returning any call. Input
+image support never authorizes output `input_image`. The fixed diagnostic is
+`invalid_output_message_content`; it includes no provider text. Legal incoming
+user content, supported legacy text, native/v1/null routes and local Beeper retain
+their behavior. Malformed output is neither repaired nor retried.
+
+The probe's final verifier also handled only `output_text` lists. It now reads
+already-supported plain JSON assistant strings and legacy `text` parts without
+trimming them. It does not promote reasoning or refusal to the expected marker,
+normalize text, or enable a new event representation. Existing JSON-to-event
+restrictions remain unchanged. Exact final comparison still rejects extra CRLF.
+
+Four new private source-representation experiments compared validated upstream
+function arguments with restored arguments. These are observation-only private
+variants, not new canonical capabilities or acceptance cases:
+
+| Representation (one attempt per provider) | DeepSeek none | GLM low |
+| --- | --- | --- |
+| Minimal two-character value separated by CRLF | Failed: 8 → 10 bytes, no CR/LF, two backslashes | Failed: same fixed counts |
+| Existing synthetic source, CRLF expressed as Unicode JSON escapes in the prompt | Failed: 53 → 52 bytes, CRLF became LF | Failed: same fixed counts |
+
+In all four failures, the upstream source already differed from the request and
+the argument JSON bytes remained exactly unchanged through restoration. The
+experiments distinguish the upstream output from local adaptation; they do not
+identify whether model generation or provider processing changed the text. No
+mismatched source was executed, no synthetic result was sent after the mismatch,
+and no failed request was retried. The alternative prompt representation was not
+promoted to a production workaround.
+
+With the new terminal validator, four new canonical CLI cases passed: file
+read/change/verify and stop-after-tool-error for each provider, totaling twelve
+requests. The file cases preserve the complete expected CRLF file bytes by
+changing only the selected substring; they do not require the model to reproduce
+every newline. These passes and the four failed private probes are separate
+evidence and do not replace older results or full fresh Desktop acceptance.
+
+Source is alpha.127. The installed alpha.123 runtime, registry, default model,
+credentials and running Desktop were unchanged. The opaque high-effort proposal
+remains unimplemented pending its separate authorization.
+
+## Native terminal evaluator fixes (alpha.129, 2026-09-10)
+
+The prior blanket policy refusal also occurred for a single file read. The
+isolated CLI ignored user configuration and did not select a Windows sandbox
+implementation. An explicit `--windows-sandbox unelevated` option now supplies
+the restricted-token backend only to that disposable child; read-only and
+never-approve settings remain fixed. The official [Windows sandbox reference](https://learn.chatgpt.com/docs/windows/windows-sandbox)
+describes this backend. No elevated setup, global configuration or automatic
+backend fallback is introduced.
+
+The development cases exposed independent issues: nested token creation failed;
+Python's protected temporary-directory ACL blocked native file reads; and the
+validator expected the older `Final output:` label instead of current `Output:`.
+The harness now separates a private CLI home from a new synthetic workspace with
+normal inheritance, parses either native envelope and validates the exit status.
+It never repairs an existing directory ACL or an observed tool result.
+
+PowerShell then read the file successfully but its console text lost Chinese
+characters. A process-local encoding experiment was rejected by constrained
+language mode; that failed experiment is retained and its prelude was removed.
+The final case uses native `Get-Content -AsByteStream` with exact ASCII decimal
+byte output. This new case passed using PowerShell 7, preserving BOM, Chinese,
+quotes, literal backslashes and mixed LF/CRLF bytes. It proves the bounded native
+byte read with a mock provider, not Unicode console-text compatibility, online
+model generation, arbitrary shell commands or Desktop acceptance.
+
+Git Bash still failed creating an MSYS signal pipe inside the native sandbox
+(Win32 error 5). Its negative process exit remains a failed case. It is not an
+API text-corruption result and is not repaired by this adapter. Prior provider
+CRLF-regeneration failures remain unchanged. No online inference was requested
+during these terminal fixes; installed runtime and live registration are unchanged.
+
+## Terminal-specific evaluation (alpha.128, 2026-09-10, historical)
+
+File-fixture success is independent of the terminal: the existing workspace
+case uses a dedicated MCP fixture, not PowerShell or Bash. New `cli_powershell`
+and `cli_bash` cases test a fixed native read-only command with an explicit shell
+executable, quoted paths/arguments and separate console/file-byte comparisons.
+See [the terminal case contract](responses-acceptance.md#bounded-cli-evaluation).
+The production adapter still forwards shell arguments unchanged and never
+selects a user's terminal or repairs model-authored source.
+
+Current CLI 0.153.4 exposed `exec_command` as a top-level function. A development
+fixture incorrectly assumed a `functions` namespace and was corrected against
+the observed declaration. An absolute Git Bash tool argument initially appeared
+as the Windows system `bash.exe` in the native rejection text. The evaluator now
+also scopes the requested executable's directory to the disposable child's PATH;
+it does not alter global PATH or claim actual process identity from an argument.
+
+Both native terminal cases were refused by the current read-only execution
+policy, including the reduced builtin-only fixture. These are CLI-policy
+failures observed with a mock provider, not API character-corruption results or
+successful terminal execution. Refusal-boundary tests require that failure,
+preserve the files, and stop before another upstream dispatch. The original
+development failures remain in the private audit logs. No policy was relaxed,
+no live provider was contacted, and no Desktop task or default was changed.
+
+Terminal reports bind the requested shell digest and stay separate from core
+CLI, exact-source and Desktop gates. Prior CRLF/escape failures remain unresolved;
+their status and byte comparisons are unchanged. Official documentation describes
+[shell environment configuration](https://learn.chatgpt.com/docs/config-file/config-reference)
+and the [Windows sandbox](https://learn.chatgpt.com/docs/windows/windows-sandbox),
+but does not establish the exact executable-resolution behavior observed here.

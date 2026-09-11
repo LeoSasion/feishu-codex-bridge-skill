@@ -9,6 +9,42 @@ from operator_core.responses_capabilities import RouterError
 
 
 class ProfileTests(unittest.TestCase):
+    def test_terminal_identity_and_failures_survive_without_widening_core_evidence(self):
+        profile = self.profile()
+        check = {**profile["checks"][0], "case": "cli_bash", "status": "failed",
+                 "terminal": {"family": "bash", "requested_executable_sha256": "a" * 64}}
+        report = {**check, "synthetic_only": True,
+                  **{key: profile[key] for key in ("contract_sha256", "adapter_sha256", "evaluator_sha256")}}
+        built = profile_from_reports("synthetic-terminal", ROUTE, [report])
+        inspected = inspect_profile(built)
+        self.assertEqual(inspected["terminal_checks"], [check])
+        self.assertEqual(inspected["recorded_failures"], 1)
+        self.assertFalse(inspected["isolated_cli_verified"])
+        self.assertFalse(inspected["terminal_checks_establish_desktop_selection"])
+        self.assertFalse(inspected["write_tool_approval_verified"])
+        for identity in (None, {"family": "powershell", "requested_executable_sha256": "a" * 64},
+                         {"family": "bash", "requested_executable_sha256": "invalid"},
+                         {**check["terminal"], "requested_windows_sandbox": "disabled"}):
+            with self.subTest(identity=identity), self.assertRaisesRegex(RouterError, "terminal_identity"):
+                make_profile("synthetic-terminal-invalid", ROUTE, [{**check, "terminal": identity}])
+        for backend in (None, "unelevated"):
+            with self.subTest(backend=backend):
+                terminal = {**check["terminal"], "requested_windows_sandbox": backend}
+                explicit = profile_from_reports("synthetic-terminal-explicit", ROUTE, [{**report, "terminal": terminal}])
+                self.assertEqual(inspect_profile(explicit)["terminal_checks"][0]["terminal"], terminal)
+        with self.assertRaisesRegex(RouterError, "terminal_report_success_not_verified"):
+            profile_from_reports("synthetic-terminal-contradiction", ROUTE, [{**report, "status": "passed"}])
+        successful = {**report, "status": "passed", "terminal_call_validated": True,
+                      "terminal_result_verified": True, "terminal_fixture_unchanged": True,
+                      "terminal_policy_rejected": False, "terminal_rejection": None, "terminal_exit_code": 0}
+        self.assertEqual(profile_from_reports("synthetic-terminal-success", ROUTE, [successful])["checks"][0]["status"], "passed")
+        for exit_code in (None, False, 1, -1):
+            with self.subTest(exit_code=exit_code), self.assertRaisesRegex(RouterError, "terminal_report_success_not_verified"):
+                profile_from_reports("synthetic-terminal-bad-exit", ROUTE, [{**successful, "terminal_exit_code": exit_code}])
+        profile["checks"].append(check)
+        self.assertTrue(inspect_profile(profile)["isolated_cli_verified"])
+        self.assertEqual(inspect_profile(profile)["recorded_failures"], 1)
+
     def test_optional_codecs_are_explicit_and_invalidate_contract_evidence(self):
         from operator_core.responses_capabilities import ResponsesCapabilities
         for field, default, enabled, invalid in (

@@ -229,6 +229,27 @@ class ToolAdapterTests(unittest.TestCase):
         with self.assertRaises(UpstreamProtocolError):
             restore_response(raw, strict)
 
+    def test_input_modalities_do_not_authorize_assistant_output_parts_before_calls(self):
+        from operator_core.responses_capabilities import protocol_reason
+        for part in ({"type": "input_text", "text": "synthetic input"},
+                     {"type": "input_image", "image_url": "data:image/png;base64,eA=="},
+                     {"type": "reasoning_text", "text": "synthetic reasoning"}):
+            with self.subTest(part_type=part["type"]):
+                _, context = prepare(input_modalities=["text", "image"])
+                message = {"id": "msg_invalid", "type": "message", "role": "assistant",
+                           "status": "completed", "content": [part]}
+                original = response(call(context), message)
+                snapshot = deepcopy(original)
+                with self.assertRaises(UpstreamProtocolError) as caught:
+                    restore_response(original, context)
+                self.assertEqual(protocol_reason(caught.exception), "invalid_output_message_content")
+                self.assertEqual(original, snapshot)
+                if part["type"] != "reasoning_text":
+                    # Their valid role in incoming user content is unchanged.
+                    payload = {"input": [{"role": "user", "content": [part]}]}
+                    prepared, _ = prepare(payload, input_modalities=["text", "image"])
+                    self.assertEqual(prepared["input"], payload["input"])
+
     def test_named_results_preserve_complete_object_without_creating_calls_or_tools(self):
         identity = {"type": "function_call_output", "namespace": "codex_app",
                     "name": "send_message_to_thread"}

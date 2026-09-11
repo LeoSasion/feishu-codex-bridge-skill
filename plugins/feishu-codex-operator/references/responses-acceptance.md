@@ -305,6 +305,45 @@ Desktop approval, tool execution, model identity or global readiness.
 
 ## Bounded CLI evaluation
 
+`cli_powershell` and `cli_bash` are additional, explicitly selected terminal
+cases. Supply `--terminal-shell <absolute-executable-path>` with a standard-tool,
+JSON-upstream registration. The harness does not discover or change Desktop's
+terminal. It prepends only that executable's directory to the disposable CLI
+child's PATH; the tool argument is preserved exactly. The requested executable
+SHA256 is recorded, but is not proof of the process ultimately chosen by the CLI.
+
+Each case admits one exact native `exec_command` call with `login=false`, a fixed
+work directory and no permission override. PowerShell uses the native
+`Get-Content -AsByteStream -LiteralPath`; Bash uses `cat --`. The
+fixtures include spaces, apostrophes, Chinese paths, shell metacharacters and
+literal backslashes as file data, plus LF, CRLF and BOM bytes in one input file. No arbitrary
+model-authored script is executed. The harness checks the paired native result,
+successful process status, exact expected console output, final marker and
+unchanged source bytes. PowerShell's `decimal_bytes_v1` representation emits
+ASCII decimal byte lines, including the BOM and original CR/LF bytes. Either
+LF or CRLF may separate these numbers; this grammar never normalizes file data
+or establishes Unicode console-text compatibility. Bash retains `utf8_text_v1`.
+Both current `Output:` and legacy `Final output:` native envelopes are parsed
+with an anchored grammar. A missing, nonzero or ambiguous exit status cannot pass.
+
+On Windows, `--windows-sandbox unelevated` explicitly selects the native
+restricted-token backend only for this disposable terminal evaluation. It is
+never selected after a failure, never changes a user configuration or approval
+policy, and does not run elevated setup. `--ignore-user-config` otherwise omits
+the user's backend selection. The CLI home remains private; the separate new
+synthetic work directory uses normal permission inheritance. The harness does
+not change existing directory ACLs or bypass a native restriction. Nested
+restricted-token creation can fail; retain that failure separately from a
+policy refusal, a process failure and a byte mismatch.
+
+There are at most two client model requests, zero retries and no extra tool
+calls. A native policy rejection is a failed terminal case and is classified
+separately from malformed arguments, process failures or differing output. Its
+follow-up is stopped locally before another upstream dispatch. Permissions are
+never expanded to obtain a passing result. Terminal reports and profile entries
+retain their requested shell and Windows-backend identities; they do not satisfy core workflow checks,
+Desktop terminal selection, arbitrary shell execution or write-approval gates.
+
 ```text
 python scripts/operator_responses_eval.py run --registration <private-registration.json> --cli <current-desktop-cli> --case cli_nested --receipt-dir <private-receipts> --run-id <unique-case-run>
 ```

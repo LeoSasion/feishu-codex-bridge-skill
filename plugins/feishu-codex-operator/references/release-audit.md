@@ -10,6 +10,43 @@ model selection, wake lease, lifecycle waiting, metadata-only requests,
 and App Server child cleanup. Run both while the exact installed service is
 stopped and no callback is pending. Neither proves live Feishu delivery.
 
+## Alpha.127 development validation (2026-09-10, unpublished)
+
+Full isolated regression passed 422 methods in 80.208 seconds with official CLI
+0.153.4. Five opt-in CLI methods ran, with only the two existing privilege-1314
+Windows symlink subcases skipped. One new method verifies that input modality
+support cannot authorize input-only assistant output. The existing three-transport
+rejection matrix includes invalid assistant content after a valid call. The
+probe's existing whitespace checks cover supported legacy JSON text forms.
+
+A pre-fix isolated snapshot returned a tool call despite an assistant input_text
+part. The fixed validator rejects it before call release on JSON, SSE and
+WebSocket paths. Four new canonical live CLI cases passed (twelve requests):
+workspace editing and error-stop for both providers. Four separately identified
+private representation experiments failed before result continuation (four
+requests); all showed unchanged argument JSON bytes across restoration and an
+upstream mismatch already present. No failures were replayed or repaired.
+The 107-file audit and rule mirror passed. Runtime/registry remain alpha.123
+and unchanged; none of this establishes fresh Desktop acceptance.
+
+## Alpha.126 development validation (2026-09-10, unpublished)
+
+Full isolated regression passed 421 methods in 76.270 seconds with current official
+CLI 0.153.4. All five opt-in CLI methods ran; only the two existing Windows symlink
+subcases requiring privilege 1314 were skipped. Three new methods cover cancellation
+outcome races, real CLI disconnect before buffered JSON headers, and standard-function
+source probes with rejection of altered CRLF. Both source candidates now use the
+explicit standard-function contract. Preflight passed without upstream requests.
+The extension-entry rename also retains the existing shortcut lifecycle fixture,
+which checks official-link preservation and the new executable's Windows metadata.
+
+Fifteen new owner-authorized live cases produced 13 passes and two CRLF source
+mismatches, with 35 routed request attempts including two local cancellations.
+No failed case was retried. Three evaluator revisions are represented and remain
+separate evidence; this is not a same-version profile or Desktop acceptance.
+The installed alpha.123 runtime and live registry are unchanged. The 107-file
+package audit, syntax checks and managed rule mirror passed.
+
 ## Alpha.125 development validation (2026-09-10, unpublished)
 
 Full isolated regression passed 418 methods in 69.066 seconds. All four opt-in
@@ -167,3 +204,79 @@ language syntax checks. The JSON event regression tests first reproduced three
 failures in the prior source, then passed with the fix; HTTP/WS checks confirm
 that expanded-budget rejection sends no event and performs no retry. Source
 validation did not install runtime code, change a registry or restart a service.
+## Alpha.128 terminal evaluation (2026-09-10)
+
+- Adds two explicitly selected native CLI shell cases with fixed read-only
+  commands, typed argument admission, separate console/file-byte checks and
+  requested executable digests. Per-child PATH preparation does not alter
+  Desktop's terminal or user configuration. Profiles retain terminal identities
+  and failures without granting core, Desktop or write-approval acceptance.
+- Mock-provider native execution was rejected by the current read-only CLI
+  policy. The refusal-boundary run requires failed execution reports and no
+  second upstream dispatch. It is not a successful terminal compatibility run.
+  The earlier namespace, generic-result and policy failures remain private.
+- The first full run found the new helper missing from startup's manifest
+  allowlist. Installation, status and startup inventories are now synchronized.
+  Eighteen focused checks then passed. Final full regression: 430 methods in
+  74.210 seconds, with two existing Windows symlink privilege skips. Seven
+  opt-in CLI methods ran; the two new terminal methods verify policy refusal.
+- The 109-file release inventory, syntax and byte-identical rule mirror passed
+  audit. Source is alpha.128; installed alpha.123, live registry, credentials,
+  model defaults and services were not changed. No live inference was requested.
+## Alpha.129 native terminal harness fixes (2026-09-10)
+
+- Adds explicit child-only selection of the unelevated Windows backend, while
+  keeping read-only/never approval settings. A normally inherited synthetic
+  workspace is separate from the private CLI home. No host configuration,
+  permission-rule change, elevated setup or automatic fallback is introduced.
+- Replaces the compound print/read fixture with one literal read, handles the
+  current native output envelope and validates the actual exit status. PowerShell
+  reads decimal bytes so BOM, Unicode and mixed EOLs remain exact under a
+  constrained shell. Successful byte reading does not attest to Unicode console
+  text, arbitrary commands, live provider generation or Desktop behavior.
+- The mock-provider PowerShell case passed. Git Bash's MSYS signal-pipe failure
+  remains failed. Earlier policy, nested-token, private-directory, text-output
+  and constrained-language failures remain private and retain their own evaluator
+  revisions. No observed result was normalized or retroactively accepted.
+- Full regression: 433 methods in 74.280 seconds; six opt-in CLI methods ran.
+  The three skips are the two existing WinError 1314 symlink subcases and the
+  explicitly unselected, already-failed Bash execution case. The skip does not
+  clear that failure. All executed checks passed. The 109-file inventory, syntax
+  and byte-identical rules mirror passed audit.
+- Source is alpha.129; installed alpha.123 and the live registry are unchanged.
+  No online inference, Desktop restart, deployment or publication occurred.
+
+## Alpha.130 entry setup preservation review (2026-09-11)
+
+- Reproduced a repeated setup overwriting a later edit to the launcher executable
+  in the disposable installation fixture. Setup now checks the existing binary,
+  entry script and required build/configuration records before replacing files
+  or starting another ownership generation. Existing records do not attest to
+  historical configuration fields that were never fingerprinted.
+- Changed or missing managed shortcuts stop before rebuilding, including a
+  shortcut whose edited target is native Codex. Pending installation intents
+  retain their existing recovery semantics. No new backup-copy mechanism or
+  runtime module was added.
+- Full regression ran 433 methods in 79.135 seconds: executed checks passed,
+  with the two existing Windows symlink privilege skips and the explicitly
+  unselected Bash case. Six opt-in CLI methods ran, using mock upstreams.
+  The final missing-shortcut guard and missing-file fixture variants were then
+  checked by all 11 installation/restoration methods in 29.588 seconds. This is
+  full regression followed by a focused final correction, not a claim that the
+  earlier full run included the last correction. Prior Bash and live model
+  generation failures remain failures.
+- The 109-file inventory, syntax and identical rule mirror passed audit.
+  The active frozen alpha.129 trial passed its read-only recovery preflight;
+  the installed alpha.123 runtime was not upgraded. No saved task, live model
+  test, restart, deployment, commit or push was performed in this review.
+
+### Development checkpoint validation (2026-09-11)
+
+After owner approval to save the development checkpoint, the complete final
+source was tested again: 433 methods in 77.617 seconds, with all executed checks
+passing and the same three recorded skips. This run includes the final
+missing-shortcut guard and missing-file variants. Six opt-in CLI methods ran
+against mock upstreams. Publication scope was checked against the release
+inventory, including the four earlier local commits in this development branch.
+The checkpoint preserves the outstanding Desktop acceptance and earlier Bash
+and live-generation failures; it is not a stable release or a deployment.
