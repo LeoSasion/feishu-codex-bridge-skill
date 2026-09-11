@@ -516,40 +516,44 @@ class AdaptedRouterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.received, [])
 
     async def test_named_output_codec_is_explicit_lossless_and_does_not_retry(self):
-        self.mode = 'history_only'
-        item = {'type': 'function_call_output', 'namespace': 'codex_app', 'id': 'named_fixture_item',
-                'internal_chat_message_metadata_passthrough': {'turn_id': 'turn_fixture',
-                                                              'create_time': 1788700000.125},
-                'name': 'send_message_to_thread', 'output': [
-                    {'type': 'input_text', 'text': 'private_synthetic_first', 'part': 1},
-                    {'type': 'input_text', 'text': '中文😀\r\nsecond', 'part': 2}]}
-        payload = {**self.payload, 'tools': [], 'tool_choice': 'none', 'input': [item]}
-        before = deepcopy(payload)
-        refused = await self.client.post(self.endpoint, json=payload)
-        self.assertEqual(refused.status, 400)
-        self.assertEqual(await refused.json(), {'error': {'type': 'invalid_request_error',
-            'message': 'named_function_output_not_registered'}})
-        self.assertEqual(self.received, [])
-        route = self.router.registry.routes[ROUTE['slug']]
-        self.router.registry.routes[ROUTE['slug']] = replace(route,
-            responses=ResponsesCapabilities.parse({**CAPABILITIES, 'named_function_outputs': {
-                'codex_app.send_message_to_thread': 'user_message_json_v1'}}))
-        result = await self.client.post(self.endpoint, json=payload)
-        self.assertEqual(result.status, 200)
-        self.assertEqual((await result.json())['output'][0]['content'][0]['text'], 'HISTORY_OK')
-        self.assertEqual(len(self.received), 1)
-        forwarded = self.received[0][0]
-        self.assertEqual((forwarded['tools'], forwarded['tool_choice']), ([], 'none'))
-        message = forwarded['input'][0]
-        self.assertEqual(message['role'], 'user')
-        self.assertEqual(json.loads(message['content'][0]['text'][len(NAMED_OUTPUT_PREFIX):]), item)
-        self.assertEqual(payload, before)
-        self.mode = 'error'
-        failed = await self.client.post(self.endpoint, json=payload)
-        self.assertEqual(failed.status, 429)
-        self.assertEqual(await failed.read(), self.error_body)
-        self.assertEqual(len(self.received), 2)
-        self.assertEqual(self.received[1][0], forwarded)
+        for name in ("send_message_to_thread", "create_thread"):
+            with self.subTest(name=name):
+                self.mode = 'history_only'
+                item = {'type': 'function_call_output', 'namespace': 'codex_app', 'id': 'named_fixture_item',
+                        'internal_chat_message_metadata_passthrough': {'turn_id': 'turn_fixture',
+                                                                      'create_time': 1788700000.125},
+                        'name': name, 'output': [
+                            {'type': 'input_text', 'text': 'private_synthetic_first', 'part': 1},
+                            {'type': 'input_text', 'text': '中文😀\r\nsecond', 'part': 2}]}
+                payload = {**self.payload, 'tools': [], 'tool_choice': 'none', 'input': [item]}
+                before = deepcopy(payload)
+                refused = await self.client.post(self.endpoint, json=payload)
+                self.assertEqual(refused.status, 400)
+                self.assertEqual(await refused.json(), {'error': {'type': 'invalid_request_error',
+                    'message': 'named_function_output_not_registered'}})
+                self.assertEqual(self.received, [])
+                route = self.router.registry.routes[ROUTE['slug']]
+                self.router.registry.routes[ROUTE['slug']] = replace(route,
+                    responses=ResponsesCapabilities.parse({**CAPABILITIES, 'named_function_outputs': {
+                        'codex_app.' + name: 'user_message_json_v1'}}))
+                result = await self.client.post(self.endpoint, json=payload)
+                self.assertEqual(result.status, 200)
+                self.assertEqual((await result.json())['output'][0]['content'][0]['text'], 'HISTORY_OK')
+                self.assertEqual(len(self.received), 1)
+                forwarded = self.received[0][0]
+                self.assertEqual((forwarded['tools'], forwarded['tool_choice']), ([], 'none'))
+                message = forwarded['input'][0]
+                self.assertEqual(message['role'], 'user')
+                self.assertEqual(json.loads(message['content'][0]['text'][len(NAMED_OUTPUT_PREFIX):]), item)
+                self.assertEqual(payload, before)
+                self.mode = 'error'
+                failed = await self.client.post(self.endpoint, json=payload)
+                self.assertEqual(failed.status, 429)
+                self.assertEqual(await failed.read(), self.error_body)
+                self.assertEqual(len(self.received), 2)
+                self.assertEqual(self.received[1][0], forwarded)
+                self.router.registry.routes[ROUTE['slug']] = route
+                self.received.clear()
 
     async def test_json_restores_call_and_recomputes_headers_without_credential_leak(self):
         result = await self.client.post(self.endpoint, json=self.payload,

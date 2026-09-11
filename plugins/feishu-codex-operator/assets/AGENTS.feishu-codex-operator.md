@@ -87,8 +87,9 @@
   tool/file checks and per-case policy; never reclassify old failures or infer
   Desktop acceptance from this formatting compatibility.
   Current Codex named function results may legitimately omit call_id. A dated,
-  explicit codec may encode only the registered codex_app.send_message_to_thread
-  source as labelled user-message JSON, preserving the entire original object,
+  explicit codec may encode only the individually registered
+  codex_app.send_message_to_thread and codex_app.create_thread sources as labelled
+  user-message JSON, preserving the entire original object,
   text parts, absent/null identities and order. This is an explicit role/format
   representation, never a reconstructed call, authentication, system/developer
   instruction, new tool permission, XML extraction, execution or retry.

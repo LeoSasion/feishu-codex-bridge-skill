@@ -9,7 +9,9 @@ import json
 import math
 import re
 
-from .responses_capabilities import ResponsesCapabilities, RouterError, UpstreamProtocolError
+from .responses_capabilities import (
+    NAMED_FUNCTION_OUTPUT_SOURCES, ResponsesCapabilities, RouterError, UpstreamProtocolError,
+)
 
 MAX_ARGUMENT_BYTES = 2 * 1024 * 1024
 MAX_TOOLS = 1024
@@ -382,10 +384,11 @@ def _named_function_output(item, caps):
     # Current Codex defines named results with an optional/nullable call_id.
     # This explicitly selected codec changes their representation to a user
     # message; it never reconstructs a call or infers authority from the name.
-    identity = item.get("namespace"), item.get("name")
-    if (identity != ("codex_app", "send_message_to_thread")
-            or dict(caps.named_function_outputs).get("codex_app.send_message_to_thread")
-            != "user_message_json_v1"):
+    name = item.get("name")
+    source = ("codex_app." + name
+              if item.get("namespace") == "codex_app" and isinstance(name, str) else None)
+    if (source not in NAMED_FUNCTION_OUTPUT_SOURCES
+            or dict(caps.named_function_outputs).get(source) != "user_message_json_v1"):
         raise RouterError("named_function_output_not_registered")
     if set(item) - {"type", "namespace", "name", "call_id", "id", "output",
                     "internal_chat_message_metadata_passthrough"}:

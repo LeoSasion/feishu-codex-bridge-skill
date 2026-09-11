@@ -23,10 +23,41 @@ Later on 2026-09-11, the owner completed the authorized restart and reported
 that the model list appeared. Independent read-only checks found the exact
 frozen alpha.129 router ready, with its owned configuration prefix and candidate
 registry matching the trial records. This is startup evidence, not model tool
-acceptance; the prepared Desktop file cases have not been dispatched. The
+acceptance; at that checkpoint the prepared file cases had not been dispatched. The
 installed alpha.123 runtime and its registry remain separate. Alpha.130 adds
 entry-setup preservation checks in source only; the active trial still uses its
 unchanged frozen runtime and its recovery preflight remains valid.
+
+The owner subsequently authorized two independent Desktop file cases. Each failed
+before file execution with `reasoning_summary_not_supported`, and neither was
+retried. Desktop diagnostics recorded `reasoningSummaryOverride=detailed` and
+`summary=detailed` for both turns, overriding the catalog default. The two fixture
+directories remained byte-identical, including their verifier and prompt files.
+The tasks retained existing permissions; no approval or sandbox gate was passed.
+
+Two separate, tool-free endpoint diagnostics then sent the unchanged
+`summary=detailed` parameter once each, using the existing DeepSeek `none` and
+GLM `low` efforts. Both returned HTTP 200, a validated terminal response and the
+exact requested marker. The source candidates now explicitly allow unchanged
+summary-parameter passthrough. This is parameter acceptance only: it does not
+establish summary generation, tools, streaming, Desktop acceptance or semantic
+reasoning behavior. It changes the contract digest and invalidates earlier
+contract-bound acceptance evidence. The active frozen registry remains unchanged;
+source edits do not hot-patch or restart the running trial.
+
+The failed tasks also contained a named `codex_app.create_thread` result with no
+paired call. A separate local reproduction, using only synthetic input, rejected
+that source with `named_function_output_not_registered` after enabling summary
+passthrough in memory. Plain user input and the explicitly registered
+`codex_app.send_message_to_thread` control prepared successfully without dispatch.
+This is a second, locally demonstrated incompatibility, not a second observed
+Desktop error. After explicit owner approval, alpha.131 adds independent
+registration of the exact create-task source using the same complete-object
+codec. Rules and both source candidates now include that source. Unknown sources
+and unregistered alternatives remain rejected; no call, XML extraction, tool
+permission, execution or retry is reconstructed. The running frozen trial still
+uses its old code and contract. New endpoint and Desktop evidence must bind the
+updated adapter and contract; earlier passes and failures retain their scope.
 
 | Candidate | Official Responses base | Key environment variable | Effort |
 | --- | --- | --- | --- |
@@ -54,9 +85,24 @@ latency. There is no stream repair or automatic retry.
 Both source candidates now select `codex_tool_mode=standard`, with empty
 `custom_tools` and `history_custom_tools` maps. Codex advertises ordinary function
 tools directly; the catalog does not declare an unregistered freeform patch tool.
+
+That catalog contract does not override a project that explicitly forces Code
+Mode. A private text-only check with CLI 0.153.4 on 2026-09-11 observed that
+`features.code_mode_only=true` together with `features.code_mode.enabled=true`
+still advertised custom `exec` for a standard candidate. Setting only the first
+flag to false left both custom `exec` and ordinary functions in the request.
+The candidate correctly rejects that unregistered custom tool before dispatch.
+With both project overrides absent, the standard row advertised only functions;
+a separate row with `tool_mode=code_mode_only` retained `exec`. Each check used
+one loopback mock request and returned only text, with no tool execution or live
+provider access. Mixed-model projects should use the explicit per-model catalog
+selection rather than blanket Code Mode overrides. Review existing configuration
+before changing it and preserve other settings; these checks do not establish
+Desktop acceptance or authorize a global configuration change.
+
 Function calls/results keep their exact identities. The dated `additional_tools_v1`
 developer-envelope codec and exact named result codec for
-`codex_app.send_message_to_thread` remain selected. Client tool
+`codex_app.send_message_to_thread` and `codex_app.create_thread` are selected. Client tool
 search definitions may be adapted after successful loading; provider-hosted web
 search stays disabled. Text tool results retain JSON part boundaries. Tools
 still execute under Codex permissions, not inside the router.

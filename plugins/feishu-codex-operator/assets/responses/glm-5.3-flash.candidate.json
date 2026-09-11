@@ -25,13 +25,14 @@
     "structured_tool_outputs": false,
     "developer_role": "native",
     "reasoning_input": true,
-    "reasoning_summary": false,
+    "reasoning_summary": true,
     "previous_response_id": false,
     "text_verbosity": false,
     "codex_tool_mode": "standard",
     "text_tool_outputs": "json_string",
     "history_custom_tools": {},
     "named_function_outputs": {
+      "codex_app.create_thread": "user_message_json_v1",
       "codex_app.send_message_to_thread": "user_message_json_v1"
     },
     "input_tool_definitions": "additional_tools_v1",

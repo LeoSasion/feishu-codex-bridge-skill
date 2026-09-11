@@ -339,7 +339,7 @@ function Write-RuntimeManifest {
     }
     $manifest = [ordered]@{
         schema_version = 1
-        operator_version = '4.2.0-alpha.130'
+        operator_version = '4.2.0-alpha.131'
         code_files = $hashes
         start_hook_sha256 = (Get-FileHash -LiteralPath $startHook -Algorithm SHA256).Hash.ToLowerInvariant()
         stop_hook_sha256 = (Get-FileHash -LiteralPath $stopHook -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -425,6 +425,6 @@ if (Test-Path -LiteralPath $health -PathType Leaf) {
     Remove-Item -LiteralPath $health -Force
 }
 
-Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.130 into $runtime"
+Write-Output "Installed Feishu Codex Operator 4.2.0-alpha.131 into $runtime"
 Write-Output 'The Operator remains stopped. Configure the minimal Beeper UUID, register Final Callback routing, review Hooks in Desktop settings, then start it.'
 if (-not $SkipDesktopEntry) { Install-OperatorDesktopEntry -ProjectRoot $project | ConvertTo-Json }

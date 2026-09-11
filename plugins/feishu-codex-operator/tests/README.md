@@ -62,6 +62,16 @@ Alpha.124 在现有 probe 往返用例中加入 JSON 字符串/参数对象与 L
 
 ## 本地暂存与历史记录
 
+Alpha.131 extends the existing named-result matrices to both individually
+registered sources: `codex_app.send_message_to_thread` and
+`codex_app.create_thread`. They check exact JSON roundtrip of the complete source,
+absent/null identities, text-part order and metadata; an unregistered sibling,
+malformed source, opaque/nontext content and unmatched paired history still fail.
+The existing HTTP case verifies rejection before upstream dispatch, successful
+forwarding and exact upstream-error preservation with no retry for either source.
+Profile checks reject evidence after the source allowlist changes. These are
+synthetic cases and add no live task, provider request or tool execution.
+
 标准发现入口只扫描本目录。私有目录中的必要恢复原件、失败记录和验收 fixture
 不加入当前测试集合。已核实无用的历史源码、runtime 和测试副本可以清理；已删除
 版本不再作为恢复来源。原生目录 fixture 是显式 CLI 测试数据；读取它不会运行旧测试。

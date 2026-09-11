@@ -14,6 +14,11 @@ class UpstreamProtocolError(RouterError):
     """A single upstream attempt returned an invalid Responses protocol."""
 
 
+NAMED_FUNCTION_OUTPUT_SOURCES = frozenset({
+    "codex_app.send_message_to_thread", "codex_app.create_thread",
+})
+
+
 PROTOCOL_REASONS = frozenset({
     "invalid_protocol_json", "invalid_protocol_string", "invalid_protocol_unicode",
     "invalid_json_event_content",
@@ -138,7 +143,7 @@ class ResponsesCapabilities:
             raise RouterError("invalid_history_custom_tool_capabilities")
         named_outputs = value.get("named_function_outputs", {})
         if (not isinstance(named_outputs, dict) or any(
-                key != "codex_app.send_message_to_thread" or mode != "user_message_json_v1"
+                key not in NAMED_FUNCTION_OUTPUT_SOURCES or mode != "user_message_json_v1"
                 for key, mode in named_outputs.items())):
             raise RouterError("invalid_named_function_output_capabilities")
         text_outputs = value.get("text_tool_outputs", "native")

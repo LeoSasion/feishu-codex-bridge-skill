@@ -10,6 +10,34 @@ model selection, wake lease, lifecycle waiting, metadata-only requests,
 and App Server child cleanup. Run both while the exact installed service is
 stopped and no callback is pending. Neither proves live Feishu delivery.
 
+## Alpha.131 development validation (2026-09-11, unpublished)
+
+The owner approved independent registration of `codex_app.create_thread` in the
+existing named-result codec. Five existing test methods now cover both exact
+sources, independent opt-in, complete-source preservation, malformed/unknown
+source rejection, unchanged tool permissions, HTTP error preservation without
+retry and contract-bound evidence invalidation. The current official CLI 0.153.4
+schema still requires only type/output for named results; optional/nullable
+identities are not reconstructed. No runtime module or MCP method was added.
+
+Focused protocol, event, router and profile checks passed 110 methods. The first
+full run used an omitted Windows-backend selection and failed its PowerShell
+execution case with a policy rejection; that result remains failed. A separate
+full run explicitly selected the documented unelevated backend for disposable
+read-only/never-approve children and passed 433 methods in 84.817 seconds, with
+three retained skips: two Windows privilege-1314 symlink subcases and the
+unselected Bash case. Earlier Bash and live Desktop failures remain unchanged.
+All regression upstreams were synthetic, and no live model or task was retried.
+
+The 109-file package, syntax, rule mirror and diff checks passed. Both source
+candidates explicitly include the create-task codec and the separately probed
+unchanged summary parameter. Their contract and adapter identities changed;
+earlier endpoint/CLI evidence cannot establish acceptance of this new contract.
+Source is alpha.131, the active frozen trial remains alpha.129, and the separate
+installed runtime remains alpha.123. The trial's recovery checks pass with all
+33 frozen files unchanged and no pending callback. Deployment and fresh Desktop
+file/permission acceptance remain outstanding; no stable release is claimed.
+
 ## Alpha.127 development validation (2026-09-10, unpublished)
 
 Full isolated regression passed 422 methods in 80.208 seconds with official CLI

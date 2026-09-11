@@ -845,7 +845,7 @@ are preserved; returned executable calls are rejected when none were advertised.
 Text-part result encoding remains the separate explicit lossless JSON option.
 No source is executed, repaired, summarized, or retried by this history codec.
 
-### Explicit named function results (alpha.104)
+### Explicit named function results (alpha.104; create-task extension alpha.131)
 
 The current CLI 0.153.4 generated `FunctionCallOutputResponseItem` schema requires
 only `type` and `output`; `call_id`, `name` and `namespace` are optional/nullable.
@@ -854,10 +854,12 @@ Desktop can use a named result for a delegated input without a preceding call.
 This is a distinct schema form, not proof that a missing paired-call ID can be
 repaired. LM Studio rejected the raw named form in a single local probe.
 
-The optional capability defaults to `{}`. Its only accepted entry is:
+The optional capability defaults to `{}`. Each of these exact sources may be
+registered independently; enabling one does not enable the other:
 
 ```json
 "named_function_outputs": {
+  "codex_app.create_thread": "user_message_json_v1",
   "codex_app.send_message_to_thread": "user_message_json_v1"
 }
 ```
@@ -869,6 +871,13 @@ part and its metadata, Unicode and ordering. It does not extract or interpret
 delegation XML, make a call ID, claim authentication from source metadata, or
 create a system/developer message. It adds no executable definition or permission.
 The model still decides how to interpret the data under Desktop instructions.
+
+Alpha.131 adds the owner-approved `codex_app.create_thread` source observed in
+Desktop's initial task input. It uses the same complete-object representation
+and validation as the send-message source. This does not register a callable
+create-task tool, authorize a task creation, resume an old failed turn or infer
+fresh-context acceptance. Both sources retain the dated CLI 0.153.4 schema shape;
+the source's name remains data, not proof of authority.
 
 The codec is chosen before the first upstream request and only for the exact
 registered source with an absent/null call ID. A nonempty call ID uses strict

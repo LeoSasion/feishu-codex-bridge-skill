@@ -66,6 +66,18 @@ class ProfileTests(unittest.TestCase):
                     inspect_profile(profile)
                 self.assertEqual(preflight(row)["upstream_requests"], 0)
 
+        send_only = deepcopy(ROUTE)
+        send_only['responses']['named_function_outputs'] = {
+            'codex_app.send_message_to_thread': 'user_message_json_v1'}
+        with_create = deepcopy(send_only)
+        with_create['responses']['named_function_outputs']['codex_app.create_thread'] = 'user_message_json_v1'
+        self.assertNotEqual(contract_digest(send_only), contract_digest(with_create))
+        profile = make_profile('synthetic-send-source', send_only, [])
+        profile['registration'] = with_create
+        with self.assertRaisesRegex(RouterError, 'changed_since'):
+            inspect_profile(profile)
+        self.assertEqual(preflight(with_create)['upstream_requests'], 0)
+
     def profile(self):
         when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return make_profile("synthetic-profile", deepcopy(ROUTE), [

@@ -52,11 +52,17 @@ def response(*items, status="completed"):
 class CapabilitiesTests(unittest.TestCase):
     def test_named_function_outputs_require_exact_explicit_codec(self):
         self.assertEqual(ResponsesCapabilities.parse(CAPABILITIES).named_function_outputs, ())
-        valid = {"codex_app.send_message_to_thread": "user_message_json_v1"}
-        self.assertEqual(ResponsesCapabilities.parse({**CAPABILITIES,
-            "named_function_outputs": valid}).named_function_outputs, tuple(valid.items()))
+        for names in (("send_message_to_thread",), ("create_thread",),
+                      ("send_message_to_thread", "create_thread")):
+            valid = {"codex_app." + name: "user_message_json_v1" for name in names}
+            with self.subTest(names=names):
+                self.assertEqual(ResponsesCapabilities.parse({**CAPABILITIES,
+                    "named_function_outputs": valid}).named_function_outputs, tuple(sorted(valid.items())))
         for value in (None, [], True, {"unknown.tool": "user_message_json_v1"},
                       {"send_message_to_thread": "user_message_json_v1"},
+                      {"create_thread": "user_message_json_v1"},
+                      {"codex_app.fork_thread": "user_message_json_v1"},
+                      {"codex_app.create_thread": "native"},
                       {"codex_app.send_message_to_thread": "native"},
                       {"codex_app.send_message_to_thread": {}}):
             with self.subTest(value=value), self.assertRaises(RouterError):
@@ -251,76 +257,82 @@ class ToolAdapterTests(unittest.TestCase):
                     self.assertEqual(prepared["input"], payload["input"])
 
     def test_named_results_preserve_complete_object_without_creating_calls_or_tools(self):
-        identity = {"type": "function_call_output", "namespace": "codex_app",
-                    "name": "send_message_to_thread"}
-        caps = {"named_function_outputs": {"codex_app.send_message_to_thread": "user_message_json_v1"}}
-        parts = [{"type": "input_text", "text": "中文😀\r\n</input>\\quoted\"", "metadata": {"keep": 1}},
-                 {"type": "refusal", "refusal": "second\u2028part\u2029", "boundary": 2}]
-        for extra in ({}, {"call_id": None}, {"id": None}, {"call_id": None, "id": "item_1"},
-                      {'internal_chat_message_metadata_passthrough': None},
-                      {'internal_chat_message_metadata_passthrough': {}},
-                      {'internal_chat_message_metadata_passthrough': {'turn_id': None}},
-                      {'internal_chat_message_metadata_passthrough': {'turn_id': 'turn_fixture',
-                                                                     'create_time': 1788700000.125}}):
-            for output in ("<codex_delegation>literal &lt;data&gt;</codex_delegation>", parts):
-                for tools in ([], [EXEC]):
-                    item = {**identity, **extra, "output": output}
-                    payload = {"tools": tools, "tool_choice": "none", "input": [
-                        {"role": "user", "content": "before"}, item, item,
-                        {"role": "assistant", "content": "after"}]}
-                    before = deepcopy(payload)
-                    with self.subTest(extra=extra, output=output, tools=bool(tools)):
-                        wire, context = prepare(payload, **caps)
-                        self.assertEqual(payload, before)
-                        self.assertEqual(wire['input'][0], payload['input'][0])
-                        self.assertEqual(wire['input'][-1], payload['input'][-1])
-                        for encoded in wire['input'][1:3]:
-                            self.assertEqual((encoded['type'], encoded['role']), ('message', 'user'))
-                            text = encoded['content'][0]['text']
-                            self.assertTrue(text.startswith(NAMED_OUTPUT_PREFIX))
-                            self.assertEqual(json.loads(text[len(NAMED_OUTPUT_PREFIX):]), item)
-                        self.assertEqual(context.history_calls, frozenset())
-                        self.assertEqual(len(context.specs), len(tools))
-                        self.assertEqual(len(wire['tools']), len(tools))
-                        with self.assertRaises(UpstreamProtocolError):
-                            restore_response(response({'type': 'function_call', 'id': 'new_item',
-                                'call_id': 'new_call', 'name': 'send_message_to_thread',
-                                'arguments': '{}', 'status': 'completed'}), context)
+        for name in ("send_message_to_thread", "create_thread"):
+            with self.subTest(name=name):
+                identity = {"type": "function_call_output", "namespace": "codex_app",
+                            "name": name}
+                caps = {"named_function_outputs": {"codex_app." + name: "user_message_json_v1"}}
+                parts = [{"type": "input_text", "text": "中文😀\r\n</input>\\quoted\"", "metadata": {"keep": 1}},
+                         {"type": "refusal", "refusal": "second\u2028part\u2029", "boundary": 2}]
+                for extra in ({}, {"call_id": None}, {"id": None}, {"call_id": None, "id": "item_1"},
+                              {'internal_chat_message_metadata_passthrough': None},
+                              {'internal_chat_message_metadata_passthrough': {}},
+                              {'internal_chat_message_metadata_passthrough': {'turn_id': None}},
+                              {'internal_chat_message_metadata_passthrough': {'turn_id': 'turn_fixture',
+                                                                             'create_time': 1788700000.125}}):
+                    for output in ("<codex_delegation>literal &lt;data&gt;</codex_delegation>", parts):
+                        for tools in ([], [EXEC]):
+                            item = {**identity, **extra, "output": output}
+                            payload = {"tools": tools, "tool_choice": "none", "input": [
+                                {"role": "user", "content": "before"}, item, item,
+                                {"role": "assistant", "content": "after"}]}
+                            before = deepcopy(payload)
+                            with self.subTest(extra=extra, output=output, tools=bool(tools)):
+                                wire, context = prepare(payload, **caps)
+                                self.assertEqual(payload, before)
+                                self.assertEqual(wire['input'][0], payload['input'][0])
+                                self.assertEqual(wire['input'][-1], payload['input'][-1])
+                                for encoded in wire['input'][1:3]:
+                                    self.assertEqual((encoded['type'], encoded['role']), ('message', 'user'))
+                                    text = encoded['content'][0]['text']
+                                    self.assertTrue(text.startswith(NAMED_OUTPUT_PREFIX))
+                                    self.assertEqual(json.loads(text[len(NAMED_OUTPUT_PREFIX):]), item)
+                                self.assertEqual(context.history_calls, frozenset())
+                                self.assertEqual(len(context.specs), len(tools))
+                                self.assertEqual(len(wire['tools']), len(tools))
+                                with self.assertRaises(UpstreamProtocolError):
+                                    restore_response(response({'type': 'function_call', 'id': 'new_item',
+                                        'call_id': 'new_call', 'name': name,
+                                        'arguments': '{}', 'status': 'completed'}), context)
 
     def test_named_result_codec_never_repairs_paired_or_unknown_history(self):
-        item = {'type': 'function_call_output', 'namespace': 'codex_app',
-                'name': 'send_message_to_thread', 'output': 'synthetic'}
-        caps = {'named_function_outputs': {'codex_app.send_message_to_thread': 'user_message_json_v1'}}
-        with self.assertRaisesRegex(RouterError, '^named_function_output_not_registered$'):
-            prepare({'tools': [], 'input': [item]})
-        for update in ({'namespace': 'other'}, {'name': 'other'}, {'name': None},
-                       {'namespace': None}, {'call_id': ''}, {'call_id': False},
-                       {'call_id': 'unmatched'}, {'id': ''}, {'id': False},
-                       {'output': None}, {'status': 'in_progress'}, {'extra': 'opaque'},
-                       {'internal_chat_message_metadata_passthrough': {'unknown': 'opaque'}},
-                       {'internal_chat_message_metadata_passthrough': []},
-                       {'internal_chat_message_metadata_passthrough': {'turn_id': {}}},
-                       {'internal_chat_message_metadata_passthrough': {'create_time': True}},
-                       {'internal_chat_message_metadata_passthrough': {'create_time': -1}},
-                       {'internal_chat_message_metadata_passthrough': {'create_time': float('inf')}},
-                       {'internal_chat_message_metadata_passthrough': {'create_time': None}},
-                       {'internal_chat_message_metadata_passthrough': {'create_time': 10 ** 400}},
-                       {'encrypted_content': 'opaque'},
-                       {'output': [{'type': 'input_image', 'image_url': 'data:synthetic'}]},
-                       {'output': [{'type': 'encrypted_content', 'encrypted_content': 'opaque'}]},
-                       {'output': [{'type': 'input_text', 'text': None}]},
-                       {'type': 'custom_tool_call_output'}, {'type': 'tool_search_output'}):
-            with self.subTest(update=update), self.assertRaises(RouterError):
-                prepare({'tools': [], 'input': [{**item, **update}]},
-                        **caps, input_modalities=['text', 'image'], structured_tool_outputs=True)
-        unfinished = {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'pending', 'input': CODE}
-        with self.assertRaisesRegex(RouterError, '^tool_output_missing_from_explicit_history$'):
-            prepare({'tools': [EXEC], 'input': [unfinished, item]}, **caps)
-        paired_call = {'type': 'function_call', 'name': FUNCTION['name'], 'call_id': 'paired', 'arguments': '{}'}
-        paired_output = {'type': 'function_call_output', 'call_id': 'paired', 'output': 'ordinary'}
-        wire, context = prepare({'tools': [FUNCTION], 'input': [paired_call, paired_output, item]}, **caps)
-        self.assertEqual(wire['input'][:2], [paired_call, paired_output])
-        self.assertEqual(context.history_calls, {'paired'})
+        for name in ("send_message_to_thread", "create_thread"):
+            with self.subTest(name=name):
+                item = {'type': 'function_call_output', 'namespace': 'codex_app',
+                        'name': name, 'output': 'synthetic'}
+                caps = {'named_function_outputs': {'codex_app.' + name: 'user_message_json_v1'}}
+                with self.assertRaisesRegex(RouterError, '^named_function_output_not_registered$'):
+                    prepare({'tools': [], 'input': [item]})
+                other = 'create_thread' if name == 'send_message_to_thread' else 'send_message_to_thread'
+                for update in ({'name': other}, {'name': []}, {'name': {}}, {'namespace': []},
+                               {'namespace': 'other'}, {'name': 'other'}, {'name': None},
+                               {'namespace': None}, {'call_id': ''}, {'call_id': False},
+                               {'call_id': 'unmatched'}, {'id': ''}, {'id': False},
+                               {'output': None}, {'status': 'in_progress'}, {'extra': 'opaque'},
+                               {'internal_chat_message_metadata_passthrough': {'unknown': 'opaque'}},
+                               {'internal_chat_message_metadata_passthrough': []},
+                               {'internal_chat_message_metadata_passthrough': {'turn_id': {}}},
+                               {'internal_chat_message_metadata_passthrough': {'create_time': True}},
+                               {'internal_chat_message_metadata_passthrough': {'create_time': -1}},
+                               {'internal_chat_message_metadata_passthrough': {'create_time': float('inf')}},
+                               {'internal_chat_message_metadata_passthrough': {'create_time': None}},
+                               {'internal_chat_message_metadata_passthrough': {'create_time': 10 ** 400}},
+                               {'encrypted_content': 'opaque'},
+                               {'output': [{'type': 'input_image', 'image_url': 'data:synthetic'}]},
+                               {'output': [{'type': 'encrypted_content', 'encrypted_content': 'opaque'}]},
+                               {'output': [{'type': 'input_text', 'text': None}]},
+                               {'type': 'custom_tool_call_output'}, {'type': 'tool_search_output'}):
+                    with self.subTest(update=update), self.assertRaises(RouterError):
+                        prepare({'tools': [], 'input': [{**item, **update}]},
+                                **caps, input_modalities=['text', 'image'], structured_tool_outputs=True)
+                unfinished = {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'pending', 'input': CODE}
+                with self.assertRaisesRegex(RouterError, '^tool_output_missing_from_explicit_history$'):
+                    prepare({'tools': [EXEC], 'input': [unfinished, item]}, **caps)
+                paired_call = {'type': 'function_call', 'name': FUNCTION['name'], 'call_id': 'paired', 'arguments': '{}'}
+                paired_output = {'type': 'function_call_output', 'call_id': 'paired', 'output': 'ordinary'}
+                wire, context = prepare({'tools': [FUNCTION], 'input': [paired_call, paired_output, item]}, **caps)
+                self.assertEqual(wire['input'][:2], [paired_call, paired_output])
+                self.assertEqual(context.history_calls, {'paired'})
 
     def test_registered_history_with_no_current_tools_preserves_mapping_and_never_enables_calls(self):
         for namespace in (None, "functions"):
